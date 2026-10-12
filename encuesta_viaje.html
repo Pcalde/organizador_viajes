@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>¿A dónde vamos?</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  button, label, a, input, textarea {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  :root {
+    --bg: #f5f0e8;
+    --card: #fffdf8;
+    --ink: #1a1612;
+    --muted: #7a6f63;
+    --accent: #c94f2c;
+    --accent2: #3a6b4a;
+    --border: #ddd5c8;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 300;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  header h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  header p {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .form-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-size: 1.15rem;
+    font-weight: 300;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-title span.num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  /* ── Nombre ── */
+  input[type="text"] {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    background: var(--bg);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+
+  /* ── Opciones destino ── */
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+  }
+
+  .opt-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 0.9rem;
+    user-select: none;
+  }
+
+  .opt-label input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0; height: 0;
+  }
+
+  .opt-label .check {
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .opt-label input:checked ~ .check {
+    background: var(--accent2);
+    border-color: var(--accent2);
+  }
+
+  .opt-label input:checked ~ .check::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  .opt-label:has(input:checked) {
+    border-color: var(--accent2);
+    background: #eef5f0;
+  }
+
+  /* ── Slider precio ── */
+  .price-display {
+    font-family: 'Fraunces', serif;
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--accent2) var(--pct, 0%), var(--border) var(--pct, 0%));
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%; height: 4px; border-radius: 2px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 2px solid var(--accent2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:active { transform: scale(1.15); }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 2px solid var(--accent2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    cursor: pointer;
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--accent2) var(--pct, 0%), var(--border) var(--pct, 0%));
+  }
+
+  .transport-opts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Radio buttons reutilizan .opt-label; check-radio los hace circulares */
+  .check-radio { border-radius: 50% !important; }
+  .check-radio::after {
+    width: 8px !important; height: 8px !important;
+    border: none !important;
+    border-radius: 50% !important;
+    background: #fff;
+    transform: none !important;
+  }
+  .opt-label input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0; height: 0;
+  }
+  .opt-label:has(input[type="radio"]:checked) {
+    border-color: var(--accent2);
+    background: #eef5f0;
+  }
+  .opt-label input[type="radio"]:checked ~ .check-radio {
+    background: var(--accent2);
+    border-color: var(--accent2);
+  }
+  .opt-label.is-checked-radio {
+    border-color: var(--accent2);
+    background: #eef5f0;
+  }
+
+  .price-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+
+  /* ── Días disponibles ── */
+  .ranges-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .date-range-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+  }
+
+  .date-range-row label { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+
+  .date-range-row input[type="date"] {
+    border: none;
+    background: transparent;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+    padding: 0;
+    width: auto;
+  }
+
+  .date-range-row .sep { color: var(--muted); font-size: 0.85rem; }
+
+  .btn-remove {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .btn-remove:hover { color: var(--accent); }
+
+  .btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.875rem;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    width: 100%;
+    justify-content: center;
+  }
+  .btn-add:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── Días máximos ── */
+  .dias-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .stepper button {
+    background: var(--bg);
+    border: none;
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--ink);
+    transition: background 0.15s;
+  }
+  .stepper button:hover { background: var(--border); }
+
+  .stepper span {
+    width: 52px;
+    text-align: center;
+    font-family: 'Fraunces', serif;
+    font-size: 1.25rem;
+    font-weight: 300;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    line-height: 44px;
+  }
+
+  /* ── Toggle fines de semana ── */
+  .toggle-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    user-select: none;
+  }
+
+  .toggle-label input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0; height: 0;
+  }
+
+  .toggle-pill {
+    width: 42px; height: 24px;
+    border-radius: 12px;
+    background: var(--border);
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+
+  .toggle-pill::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+
+  .toggle-label input:checked + .toggle-pill { background: var(--accent2); }
+  .toggle-label input:checked + .toggle-pill::after { transform: translateX(18px); }
+
+  /* ── Notas ── */
+  textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    background: var(--bg);
+    color: var(--ink);
+    outline: none;
+    resize: vertical;
+    min-height: 80px;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  /* ── Botón generar ── */
+  .btn-generate {
+    width: 100%;
+    padding: 16px;
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Fraunces', serif;
+    font-size: 1.1rem;
+    font-weight: 300;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.15s;
+  }
+  .btn-generate:hover { background: #2e2820; transform: translateY(-1px); }
+  .btn-generate:active { transform: translateY(0); }
+
+  /* ── Output JSON ── */
+  .output-box {
+    display: none;
+  }
+
+  .output-box.visible { display: block; }
+
+  .output-box pre {
+    background: #1a1612;
+    color: #e8dfd0;
+    border-radius: var(--radius);
+    padding: 22px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .output-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .btn-copy, .btn-dl {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    border: none;
+  }
+
+  .btn-copy { background: var(--accent2); color: #fff; }
+  .btn-dl { background: var(--accent); color: #fff; }
+  .btn-copy:hover, .btn-dl:hover { opacity: 0.85; }
+
+  .copied-toast {
+    display: none;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--accent2);
+    margin-top: 8px;
+  }
+
+  /* ── Casas con enlace numerado ── */
+  .casa-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .casa-row:has(input:checked) { border-color: var(--accent2); background: #eef5f0; }
+
+  .casa-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--muted);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .casa-num:hover { background: var(--accent); }
+
+  .casa-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    user-select: none;
+    flex: 1;
+  }
+  .casa-label input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0; height: 0;
+  }
+  .casa-label:has(input:checked) .check { background: var(--accent2); border-color: var(--accent2); }
+  .casa-label:has(input:checked) .check::after {
+    content: '';
+    display: block;
+    width: 5px; height: 9px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  .casa-precio {
+    margin-left: auto;
+    font-size: 0.82rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>¿A dónde <em>vamos</em>?</h1>
+  <p>Rellena esto y mándame el JSON que genera al final.</p>
+</header>
+
+<div class="form-wrap">
+
+  <!-- 0. Nombre -->
+  <div class="card">
+    <div class="card-title"><span class="num">0</span> Tu nombre</div>
+    <input type="text" id="nombre" placeholder="Cómo te llamas…">
+  </div>
+
+  <!-- 1. Opciones destino -->
+  <div class="card">
+    <div class="card-title"><span class="num">1</span> ¿Qué plan dirías en realidad?</div>
+    <div class="options-grid" id="opciones-grid">
+      <!-- generadas por JS -->
+    </div>
+  </div>
+  <!-- 1b. Casas rurales específicas -->
+  <div class="card">
+    <div class="card-title"><span class="num">1b</span> ¿Qué casas en particular te gustan? <span style="font-size:0.78rem;color:var(--muted);font-family:'DM Sans',sans-serif;font-weight:400"> — pulsa el número para ver el enlace</span></div>
+    <div id="casas-grid" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+
+  <!-- 2. Precio máximo -->
+  <div class="card">
+    <div class="card-title"><span class="num">2</span> Precio máximo por persona</div>
+    <div class="price-display" id="price-val">100 €</div>
+    <input type="range" id="precio" min="20" max="500" step="20" value="100">
+    <div class="price-labels"><span>20 €</span><span>500 €</span></div>
+  </div>
+
+  <!-- 3. Rangos de fechas disponibles -->
+  <div class="card">
+    <div class="card-title"><span class="num">3</span> ¿Cuándo podrías?</div>
+    <div class="ranges-list" id="ranges-list"></div>
+    <button class="btn-add">+ Añadir rango de fechas</button>
+  </div>
+
+  <!-- 4. Días máximos + disponibilidad fin de semana -->
+  <div class="card">
+    <div class="card-title"><span class="num">4</span> Duración &amp; disponibilidad</div>
+    <div class="dias-row">
+      <span style="font-size:0.9rem; color:var(--muted)">Días máximos que podrías ir:</span>
+      <div class="stepper">
+        <button>−</button>
+        <span id="dias-val">5</span>
+        <button>+</button>
+      </div>
+    </div>
+    <div class="toggle-wrap">
+      <label class="toggle-label">
+        <input type="checkbox" id="solo-finde">
+        <span class="toggle-pill"></span>
+        Solo puedo fines de semana
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="me-da-igual">
+        <span class="toggle-pill"></span>
+        Me da igual entre semana o fin de semana
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="puente">
+        <span class="toggle-pill"></span>
+        Mejor si hay puente / festivo
+      </label>
+    </div>
+  </div>
+
+  <!-- 5. Transporte -->
+  <div class="card">
+    <div class="card-title"><span class="num">5</span> Transporte</div>
+    <div class="transport-opts" id="transport-opts">
+      <label class="opt-label">
+        <input type="radio" name="transporte" value="llevo-coche">
+        <span class="check check-radio"></span>
+        Llevo coche
+      </label>
+      <label class="opt-label">
+        <input type="radio" name="transporte" value="necesito">
+        <span class="check check-radio"></span>
+        Necesito que me lleven
+      </label>
+      <label class="opt-label">
+        <input type="radio" name="transporte" value="propio">
+        <span class="check check-radio"></span>
+        Me busco la vida
+      </label>
+    </div>
+    <div id="plazas-wrap" style="display:none; margin-top:14px; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:0.9rem; color:var(--muted)">Plazas libres en mi coche:</span>
+      <div class="stepper" id="stepper-plazas">
+        <button type="button">−</button>
+        <span id="plazas-val">3</span>
+        <button type="button">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Notas -->
+  <div class="card">
+    <div class="card-title"><span class="num">6</span> Algo más que añadir</div>
+    <textarea id="notas" placeholder="Restricciones, alergias, preferencias, lo que sea…"></textarea>
+  </div>
+
+  <div id="gas-status" style="display:none; text-align:center; font-size:0.85rem; padding:8px; border-radius:8px; margin-bottom:-8px;"></div>
+  <button class="btn-generate">Generar y enviar mi respuesta →</button>
+
+  <div class="output-box" id="output-box">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px"><span class="num">✓</span> Tu respuesta</div>
+      <pre id="output-json"></pre>
+      <div class="output-actions">
+        <button class="btn-copy">Copiar</button>
+        <button class="btn-dl">Descargar .json</button>
+      </div>
+      <div class="copied-toast" id="copied-toast">Copiao al portapapeles</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ── CONFIGURACIÓN ─────────────────────────────────────────────────────
+  // Pega aquí la URL de tu Google Apps Script desplegado (o déjalo vacío
+  // para modo solo-local: el JSON se muestra pero no se envía).
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyyusk-rXLkp3mSzCcR4kPBRdf94Dr6V44Yhnd_u0WcHfMXcRzjXai22WeRVXDXMV57BA/exec';
+
+  const OPCIONES = [
+    "Casa rural Sierra de cuenca",
+    "Casa rural cerca de Tarancón",
+    "Camping / aire libre / hamaqueo",
+    "Plan más elaborado",
+    "Turisteo",
+    "Playa (???)"
+  ];
+
+  const PLANES = [
+    { nombre: "Casa rural A — Zarzuela (sierra de Cuenca)", precio: "352€", url: "https://www.airbnb.es/rooms/27416516?adults=5&check_in=2026-03-27&check_out=2026-03-29" },
+    { nombre: "Casa rural B — Carrascosa",                  precio: "319€", url: "https://www.airbnb.es/rooms/1527395547779642775?adults=5&check_in=2026-03-27&check_out=2026-03-29" },
+    { nombre: "Casa rural C — Fuentidueña",                 precio: "189€", url: "https://www.airbnb.es/rooms/33527166?adults=5&check_in=2026-03-27&check_out=2026-03-29" },
+    { nombre: "Casa Consuelo — Torralba",                   precio: "240€", url: "https://www.booking.com/hotel/es/casa-consuelo-torralba-cuenca.es.html" },
+  ];
+
+  const LS_KEY = 'viaje_draft';
+  let dias = 5;
+  let plazas = 3;
+  let rangeCount = 0;
+  let jsonDataCache = '';
+  let nombreDataCache = '';
+  let debounceTimer = null;
+
+  // ── PERSISTENCIA localStorage ─────────────────────────────────────────
+  function guardarBorrador() {
+    try {
+      const rangos = Array.from(document.querySelectorAll('.date-range-row')).map(row => ({
+        desde: row.querySelector('.range-from').value || null,
+        hasta: row.querySelector('.range-to').value || null,
+      }));
+      const draft = {
+        nombre:     document.getElementById('nombre').value,
+        opciones:   Array.from(document.querySelectorAll('.opt-label input[type=checkbox]:checked')).map(c => c.value),
+        casas:      Array.from(document.querySelectorAll('.casa-label input:checked')).map(c => c.value),
+        precio:     document.getElementById('precio').value,
+        dias,
+        plazas,
+        transporte: (document.querySelector('input[name=transporte]:checked') || {}).value || null,
+        soloFinde:  document.getElementById('solo-finde').checked,
+        meDaIgual:  document.getElementById('me-da-igual').checked,
+        puente:     document.getElementById('puente').checked,
+        rangos,
+        notas:      document.getElementById('notas').value,
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(draft));
+    } catch (e) { /* localStorage bloqueado en algunos contextos privados */ }
+  }
+
+  function triggerGuardar() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(guardarGuardar, 800);
+  }
+  // alias para evitar confusión
+  function triggerSave() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(guardarBorrador, 800);
+  }
+
+  function restaurarBorrador(draft) {
+    if (!draft) return;
+    if (draft.nombre)   document.getElementById('nombre').value = draft.nombre;
+    if (draft.precio)  { document.getElementById('precio').value = draft.precio; updateSlider(); }
+    if (draft.dias)    { dias = draft.dias; document.getElementById('dias-val').textContent = dias; }
+    if (draft.plazas)  { plazas = draft.plazas; document.getElementById('plazas-val').textContent = plazas; }
+    if (draft.notas)    document.getElementById('notas').value = draft.notas;
+    if (draft.soloFinde) document.getElementById('solo-finde').checked = true;
+    if (draft.meDaIgual) document.getElementById('me-da-igual').checked = true;
+    if (draft.puente)    document.getElementById('puente').checked = true;
+
+    // Opciones
+    if (draft.opciones) {
+      document.querySelectorAll('.opt-label input[type=checkbox]').forEach(inp => {
+        if (draft.opciones.includes(inp.value)) {
+          inp.checked = true;
+          inp.closest('.opt-label').classList.add('is-checked');
+        }
+      });
+    }
+    // Casas
+    if (draft.casas) {
+      document.querySelectorAll('.casa-label input').forEach(inp => {
+        if (draft.casas.includes(inp.value)) {
+          inp.checked = true;
+          inp.closest('.casa-row').classList.add('is-checked');
+        }
+      });
+    }
+    // Transporte
+    if (draft.transporte) {
+      const r = document.querySelector(`input[name=transporte][value="${draft.transporte}"]`);
+      if (r) {
+        r.checked = true;
+        r.closest('.opt-label').classList.add('is-checked-radio');
+        if (draft.transporte === 'llevo-coche') {
+          document.getElementById('plazas-wrap').style.display = 'flex';
+        }
+      }
+    }
+    // Rangos (elimina el inicial vacío y reconstruye)
+    if (draft.rangos && draft.rangos.length) {
+      document.getElementById('ranges-list').innerHTML = '';
+      rangeCount = 0;
+      draft.rangos.forEach(r => {
+        addRange(r.desde, r.hasta);
+      });
+    }
+  }
+
+  // ── INIT DOM ──────────────────────────────────────────────────────────
+  function initDOM() {
+    // Opciones de destino
+    const gridOpciones = document.getElementById('opciones-grid');
+    OPCIONES.forEach(op => {
+      const lbl = document.createElement('label');
+      lbl.className = 'opt-label';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = op;
+      const spanCheck = document.createElement('span');
+      spanCheck.className = 'check';
+      lbl.appendChild(input);
+      lbl.appendChild(spanCheck);
+      lbl.appendChild(document.createTextNode(' ' + op));
+      gridOpciones.appendChild(lbl);
+    });
+
+    // Casas con enlace
+    const gridCasas = document.getElementById('casas-grid');
+    PLANES.forEach((plan, i) => {
+      const n = i + 1;
+      const row = document.createElement('div');
+      row.className = 'casa-row';
+      const a = document.createElement('a');
+      a.className = 'casa-num';
+      a.href = plan.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = n;
+      a.addEventListener('click', e => e.stopPropagation());
+      const lbl = document.createElement('label');
+      lbl.className = 'casa-label';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = `${n}. ${plan.nombre}`;
+      const spanCheck = document.createElement('span');
+      spanCheck.className = 'check';
+      const spanText = document.createElement('span');
+      spanText.textContent = `(${n}) ${plan.nombre}`;
+      lbl.appendChild(input);
+      lbl.appendChild(spanCheck);
+      lbl.appendChild(spanText);
+      const spanPrecio = document.createElement('span');
+      spanPrecio.className = 'casa-precio';
+      spanPrecio.textContent = plan.precio;
+      row.appendChild(a);
+      row.appendChild(lbl);
+      row.appendChild(spanPrecio);
+      gridCasas.appendChild(row);
+    });
+
+    // Rango inicial vacío
+    addRange();
+    updateSlider();
+
+    // Restaurar borrador si existe
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) restaurarBorrador(JSON.parse(raw));
+    } catch (e) {}
+  }
+
+  // ── ESTADO VISUAL (is-checked fallback) ───────────────────────────────
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('.opt-label input[type=checkbox]'))
+      e.target.closest('.opt-label').classList.toggle('is-checked', e.target.checked);
+    if (e.target.matches('.casa-label input'))
+      e.target.closest('.casa-row').classList.toggle('is-checked', e.target.checked);
+    if (e.target.matches('input[name=transporte]')) {
+      document.querySelectorAll('.opt-label input[name=transporte]').forEach(r =>
+        r.closest('.opt-label').classList.toggle('is-checked-radio', r.checked)
+      );
+      document.getElementById('plazas-wrap').style.display =
+        e.target.value === 'llevo-coche' ? 'flex' : 'none';
+    }
+    triggerSave();
+  });
+  document.addEventListener('input', triggerSave);
+
+  // ── SLIDER ────────────────────────────────────────────────────────────
+  const sliderPrecio = document.getElementById('precio');
+  const priceVal = document.getElementById('price-val');
+  function updateSlider() {
+    const min = +sliderPrecio.min, max = +sliderPrecio.max, val = +sliderPrecio.value;
+    const pct = ((val - min) / (max - min)) * 100;
+    sliderPrecio.style.setProperty('--pct', pct + '%');
+    priceVal.textContent = val + ' €';
+  }
+  sliderPrecio.addEventListener('input', updateSlider);
+
+  // ── RANGOS DE FECHAS ──────────────────────────────────────────────────
+  function addRange(desde = null, hasta = null) {
+    rangeCount++;
+    const id = rangeCount;
+    const hoy = new Date().toISOString().split('T')[0];
+    const row = document.createElement('div');
+    row.className = 'date-range-row';
+    row.id = 'range-' + id;
+    // min solo en inputs nuevos vacíos; en restauración se omite para no invalidar fechas guardadas
+    const minAttr = (desde || hasta) ? '' : `min="${hoy}"`;
+    row.innerHTML = `
+      <label>Desde</label>
+      <input type="date" class="range-from" ${minAttr}>
+      <span class="sep">→</span>
+      <label>Hasta</label>
+      <input type="date" class="range-to" ${minAttr}>
+      <button type="button" class="btn-remove" data-id="${id}" title="Quitar">✕</button>
+    `;
+    if (desde) row.querySelector('.range-from').value = desde;
+    if (hasta) row.querySelector('.range-to').value = hasta;
+    row.querySelector('.btn-remove').addEventListener('click', function () {
+      document.getElementById('range-' + this.dataset.id).remove();
+      triggerSave();
+    });
+    document.getElementById('ranges-list').appendChild(row);
+  }
+
+  // ── STEPPER DÍAS ──────────────────────────────────────────────────────
+  function changeDias(delta) {
+    dias = Math.max(1, Math.min(30, dias + delta));
+    document.getElementById('dias-val').textContent = dias;
+    triggerSave();
+  }
+
+  // ── STEPPER PLAZAS ────────────────────────────────────────────────────
+  function changePlazas(delta) {
+    plazas = Math.max(1, Math.min(8, plazas + delta));
+    document.getElementById('plazas-val').textContent = plazas;
+    triggerSave();
+  }
+
+  // ── GENERAR + ENVIAR ──────────────────────────────────────────────────
+  async function generarData() {
+    const nombre = document.getElementById('nombre').value.trim() || 'Anónimo';
+    const opciones = Array.from(document.querySelectorAll('.opt-label input[type=checkbox]:checked')).map(c => c.value);
+    const casas = Array.from(document.querySelectorAll('.casa-label input:checked')).map(c => c.value);
+    const precioMax = +document.getElementById('precio').value;
+    const transporteEl = document.querySelector('input[name=transporte]:checked');
+    const transporte = transporteEl ? transporteEl.value : null;
+
+    const rangos = Array.from(document.querySelectorAll('.date-range-row')).map(row => ({
+      desde: row.querySelector('.range-from').value || null,
+      hasta: row.querySelector('.range-to').value || null,
+    })).filter(r => r.desde || r.hasta);
+
+    const invalido = rangos.find(r => r.desde && r.hasta && r.hasta < r.desde);
+    if (invalido) {
+      alert(`Rango inválido: "${invalido.desde}" → "${invalido.hasta}". La fecha de fin no puede ser anterior al inicio.`);
+      return;
+    }
+
+    const data = {
+      nombre, opciones, casas,
+      precioMaxPP: precioMax,
+      diasMax: dias,
+      transporte: transporte === 'llevo-coche' ? { estado: 'llevo-coche', plazasLibres: plazas } : { estado: transporte },
+      disponibilidad: {
+        soloFinde: document.getElementById('solo-finde').checked,
+        meDaIgual: document.getElementById('me-da-igual').checked,
+        preferirPuente: document.getElementById('puente').checked,
+      },
+      rangosFechas: rangos,
+      notas: document.getElementById('notas').value.trim() || null,
+      timestamp: new Date().toISOString(),
+    };
+
+    jsonDataCache = JSON.stringify(data, null, 2);
+    nombreDataCache = nombre;
+    document.getElementById('output-json').textContent = jsonDataCache;
+    const box = document.getElementById('output-box');
+    box.classList.add('visible');
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Enviar a Google Apps Script si está configurado
+    if (GAS_URL) {
+      const statusEl = document.getElementById('gas-status');
+      statusEl.style.display = 'block';
+      statusEl.style.background = '#f5f0e8';
+      statusEl.style.color = '#7a6f63';
+      statusEl.style.padding = '12px 16px';
+      statusEl.textContent = 'Enviando…';
+      try {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          mode: 'no-cors', // opaque response: no podemos leer el status HTTP de vuelta
+          headers: { 'Content-Type': 'text/plain' }, // no-cors purga application/json de todas formas
+          body: jsonDataCache,
+        });
+        // Llegamos aquí si hay conectividad, pero NO confirmamos que GAS lo procesó
+        statusEl.style.background = '#eef5f0';
+        statusEl.style.color = '#3a6b4a';
+        statusEl.textContent = '✓ Petición enviada — descarga el JSON igualmente por si acaso';
+      } catch (err) {
+        // Solo salta en fallo de red real (sin internet, DNS, o Brave Shields bloqueando)
+        statusEl.style.background = '#fdf0ec';
+        statusEl.style.color = '#c94f2c';
+        statusEl.style.fontWeight = '500';
+        statusEl.textContent = '⚠ Sin conexión o bloqueado (Brave Shields u otro). Descarga o copia el JSON y mándaselo.';
+        const actions = document.querySelector('.output-actions');
+        if (actions) {
+          actions.style.outline = '2px solid #c94f2c';
+          actions.style.borderRadius = '8px';
+          actions.style.padding = '4px';
+        }
+      }
+    }
+
+    // Limpiar borrador una vez generado
+    try { localStorage.removeItem(LS_KEY); } catch (e) {}
+  }
+
+  function copiarPortapapeles() {
+    if (!jsonDataCache) return;
+    const mostrarToast = () => {
+      const t = document.getElementById('copied-toast');
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 2200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(jsonDataCache).then(mostrarToast).catch(() => copiarFallback(mostrarToast));
+    } else {
+      copiarFallback(mostrarToast);
+    }
+  }
+
+  function copiarFallback(onSuccess) {
+    const ta = document.createElement('textarea');
+    ta.value = jsonDataCache;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try {
+      document.execCommand('copy');
+      if (onSuccess) onSuccess();
+    } catch (e) {
+      alert('Tu navegador no permite copiar automáticamente. Selecciona el texto del JSON manualmente.');
+    }
+    document.body.removeChild(ta);
+  }
+
+  function descargarJSON() {
+    if (!jsonDataCache) return;
+    const blob = new Blob([jsonDataCache], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const safeName = nombreDataCache.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'respuesta';
+    a.download = `viaje-${safeName}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // ── LISTENERS ─────────────────────────────────────────────────────────
+  document.querySelector('.btn-add').addEventListener('click', () => { addRange(); triggerSave(); });
+  document.querySelector('.btn-generate').addEventListener('click', generarData);
+  document.querySelector('.btn-copy').addEventListener('click', copiarPortapapeles);
+  document.querySelector('.btn-dl').addEventListener('click', descargarJSON);
+
+  const stepperDiasBtns = document.querySelectorAll('.stepper button');
+  stepperDiasBtns[0].addEventListener('click', () => changeDias(-1));
+  stepperDiasBtns[1].addEventListener('click', () => changeDias(+1));
+
+  const stepperPlazasBtns = document.querySelectorAll('#stepper-plazas button');
+  stepperPlazasBtns[0].addEventListener('click', () => changePlazas(-1));
+  stepperPlazasBtns[1].addEventListener('click', () => changePlazas(+1));
+
+  initDOM();
+});
+</script>
+
+<!--
+╔══════════════════════════════════════════════════════════════════════╗
+║  GOOGLE APPS SCRIPT — pega esto en script.google.com               ║
+║  Despliega como webapp (Ejecutar como: yo, Acceso: cualquiera)      ║
+║  Copia la URL de despliegue en la constante GAS_URL de arriba       ║
+╠══════════════════════════════════════════════════════════════════════╣
+
+function doPost(e) {
+  // openById es obligatorio en scripts standalone (web app independiente).
+  // getActiveSpreadsheet() devuelve null en ese contexto y daría error fatal.
+  // Sustituye 'ID_DE_TU_HOJA' por el ID de tu Google Sheet (URL: /d/ESTE_ID/edit)
+  const sheet = SpreadsheetApp.openById('ID_DE_TU_HOJA').getSheets()[0];
+
+  const data = JSON.parse(e.postData.contents);
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      'timestamp','nombre','opciones','casas','precioMaxPP','diasMax',
+      'transporte','plazasLibres','soloFinde','meDaIgual','puente',
+      'rangosFechas','notas'
+    ]);
+  }
+
+  sheet.appendRow([
+    data.timestamp,
+    data.nombre,
+    (data.opciones || []).join(' | '),
+    (data.casas    || []).join(' | '),
+    data.precioMaxPP,
+    data.diasMax,
+    data.transporte?.estado || '',
+    data.transporte?.plazasLibres || '',
+    data.disponibilidad?.soloFinde      ? 'sí' : 'no',
+    data.disponibilidad?.meDaIgual      ? 'sí' : 'no',
+    data.disponibilidad?.preferirPuente ? 'sí' : 'no',
+    JSON.stringify(data.rangosFechas || []),
+    data.notas || ''
+  ]);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+╚══════════════════════════════════════════════════════════════════════╝
+-->
+</body>
+</html>
