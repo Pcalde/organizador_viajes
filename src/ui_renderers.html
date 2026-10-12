@@ -1,0 +1,461 @@
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// RENDER SCHEMA
+// ══════════════════════════════════════════════════════════════════════════
+function renderAllQuestions() {
+  const container = document.getElementById('questions-container');
+  container.innerHTML = '';
+  
+  // 1. Construcción e inyección en el DOM
+  schema.forEach((q, idx) => {
+    const card = buildQuestionCard(q, idx);
+    if (card) container.appendChild(card);
+  });
+
+  // 2. Ejecución diferida: Ahora que los elementos existen en el `document`, pintamos los pros/contras
+  schema.forEach(q => refreshPC(q.id));
+}
+
+
+// ── CHECKBOX ──────────────────────────────────────────────────────────────────
+function buildCheckbox(card, q) {
+  const list = document.createElement('div');
+  list.className = 'options-list';
+  list.dataset.qid = q.id;
+  q.opciones.forEach(op => list.appendChild(createOptItem(q.id, op)));
+  card.appendChild(list);
+  card.appendChild(createAddOptForm(q, false));
+}
+
+function buildVotoPonderado(card, q) {
+  const list = document.createElement('div');
+  list.className = 'options-list';
+  list.dataset.qid = q.id;
+
+  q.opciones.forEach(op => {
+    const val = typeof op === 'string' ? op : op.nombre;
+    const item = document.createElement('div');
+    item.className = 'opt-item pond-item';
+    
+    // Asignación estricta de variables de control para refreshPC
+    item.dataset.qid = q.id; 
+    item.dataset.val = val;
+
+    item.innerHTML = `
+      <div class="pond-row">
+        <span style="font-size:0.9rem; font-weight:500;">${esc(val)}</span>
+        <div class="btn-group-pond">
+          <button type="button" class="btn-pond" data-score="-1">-1</button>
+          <button type="button" class="btn-pond" data-score="1">+1</button>
+          <button type="button" class="btn-pond" data-score="3">+3</button>
+        </div>
+      </div>
+    `;
+
+    // Creación de la topología de pros y contras
+    const badge = document.createElement('div'); badge.className = 'pc-badge';
+    const panel = document.createElement('div'); panel.className = 'pc-panel';
+    badge.addEventListener('click', () => panel.classList.toggle('open'));
+    
+    item.append(badge, panel);
+
+    const btns = item.querySelectorAll('.btn-pond');
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const score = btn.dataset.score;
+        const isActive = btn.classList.contains('active');
+        btns.forEach(b => b.classList.remove('active'));
+
+        if (!isActive) {
+          if (score === "3" || score === "-1") {
+            const conflicto = list.querySelector(`.btn-pond.active[data-score="${score}"]`);
+            if (conflicto) conflicto.classList.remove('active');
+          }
+          btn.classList.add('active');
+        }
+        triggerSave();
+      });
+    });
+
+    list.appendChild(item);
+  });
+  
+  card.appendChild(list);
+  card.appendChild(createAddOptForm(q, false));
+}
+
+function createOptItem(qid, val) {
+  const item = document.createElement('div');
+  item.className = 'opt-item';
+  item.dataset.qid = qid;
+  item.dataset.val = val;
+
+  const lbl   = document.createElement('label');
+  lbl.className = 'opt-label';
+  const inp   = document.createElement('input'); inp.type = 'checkbox'; inp.value = val;
+  const chk   = document.createElement('span');  chk.className = 'check';
+  lbl.append(inp, chk, document.createTextNode(' ' + val));
+  inp.addEventListener('change', triggerSave);
+
+  const badge  = document.createElement('div');  badge.className = 'pc-badge';
+  const panel  = document.createElement('div');  panel.className = 'pc-panel';
+  badge.addEventListener('click', () => panel.classList.toggle('open'));
+
+  item.append(lbl, badge, panel);
+  return item;
+}
+
+// ── CASAS ─────────────────────────────────────────────────────────────────────
+function buildCasas(card, q) {
+  const list = document.createElement('div');
+  list.className = 'options-list';
+  list.dataset.qid = q.id;
+  q.opciones.forEach((op, i) => list.appendChild(createCasaItem(q.id, op, i + 1)));
+  card.appendChild(list);
+  card.appendChild(createAddCasaForm(q));
+}
+
+function createCasaItem(qid, op, n) {
+  const item = document.createElement('div');
+  item.className = 'opt-item';
+  item.dataset.qid = qid;
+  item.dataset.val  = op.nombre;
+
+  const row = document.createElement('div'); row.className = 'casa-row';
+
+  const anchor = op.url ? document.createElement('a') : document.createElement('span');
+  anchor.className = 'casa-num' + (op.url ? '' : ' no-link');
+  if (op.url) { anchor.href = op.url; anchor.target = '_blank'; anchor.rel = 'noopener'; anchor.addEventListener('click', e => e.stopPropagation()); }
+  anchor.textContent = n;
+
+  const lbl = document.createElement('label'); lbl.className = 'casa-label';
+  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.value = op.nombre;
+  const chk = document.createElement('span'); chk.className = 'check';
+  const txt = document.createElement('span'); txt.textContent = op.nombre;
+  lbl.append(inp, chk, txt);
+  inp.addEventListener('change', triggerSave);
+
+  const precio = document.createElement('span'); precio.className = 'casa-precio'; precio.textContent = op.precio || '';
+
+  row.append(anchor, lbl, precio);
+
+  const badge = document.createElement('div'); badge.className = 'pc-badge';
+  const panel = document.createElement('div'); panel.className = 'pc-panel';
+  badge.addEventListener('click', () => panel.classList.toggle('open'));
+
+  item.append(row, badge, panel);
+  return item;
+}
+
+// ── SLIDER ────────────────────────────────────────────────────────────────────
+function buildSlider(card, q) {
+  const cfg = q.config || {};
+  const min = cfg.min ?? 10, max = cfg.max ?? 500, step = cfg.step ?? 10;
+  const def = cfg.default ?? Math.round((min + max) / 2);
+
+  const display = document.createElement('div'); display.className = 'price-display';
+  const slider  = document.createElement('input');
+  slider.type = 'range'; slider.min = min; slider.max = max; slider.step = step; slider.value = def;
+  slider.dataset.qid = q.id;
+
+  function updateSl() {
+    const pct = ((+slider.value - min) / (max - min)) * 100;
+    slider.style.setProperty('--pct', pct + '%');
+    display.textContent = slider.value + ' €';
+    triggerSave();
+  }
+  slider.addEventListener('input', updateSl); updateSl();
+
+  const labels = document.createElement('div'); labels.className = 'price-labels';
+  labels.innerHTML = `<span>${min} €</span><span>${max} €</span>`;
+  card.append(display, slider, labels);
+}
+
+// ── RADIO ─────────────────────────────────────────────────────────────────────
+function buildRadio(card, q) {
+  const wrap = document.createElement('div'); wrap.className = 'transport-opts';
+  q.opciones.forEach(op => {
+    const [val, label] = op.includes('|') ? op.split('|') : [op, op];
+    const lbl = document.createElement('label'); lbl.className = 'opt-label';
+    const inp = document.createElement('input'); inp.type = 'radio'; inp.name = 'radio-' + q.id; inp.value = val;
+    const chk = document.createElement('span'); chk.className = 'check check-radio';
+    lbl.append(inp, chk, document.createTextNode(' ' + label));
+    inp.addEventListener('change', () => {
+      if (q.id === 'transporte') {
+        const pw = card.querySelector('.plazas-wrap');
+        if (pw) pw.style.display = val === 'llevo-coche' ? 'flex' : 'none';
+      }
+      triggerSave();
+    });
+    wrap.appendChild(lbl);
+  });
+  card.appendChild(wrap);
+
+  if (q.id === 'transporte') {
+    const pw = document.createElement('div'); pw.className = 'plazas-wrap'; pw.id = 'plazas-wrap';
+    const lbl = document.createElement('span'); lbl.style.cssText = 'font-size:0.9rem;color:var(--muted)'; lbl.textContent = 'Plazas libres en mi coche:';
+    pw.append(lbl, buildStepper(() => plazasVal, v => { plazasVal = v; }, 1, 8, 'plazas-val'));
+    card.appendChild(pw);
+  }
+
+  card.appendChild(createAddOptForm(q, true));
+}
+
+// ── TEXTAREA ──────────────────────────────────────────────────────────────────
+function buildTextarea(card, q) {
+  const ta = document.createElement('textarea');
+  ta.placeholder = q.config?.placeholder || '';
+  ta.dataset.qid = q.id;
+  ta.addEventListener('input', triggerSave);
+  card.appendChild(ta);
+}
+
+// ── DISPONIBILIDAD ────────────────────────────────────────────────────────────
+function buildDisponibilidad(card, q) {
+  // Date ranges
+  const sec = document.createElement('div');
+  sec.innerHTML = `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">Ventanas de disponibilidad</div>`;
+  const rl = document.createElement('div'); rl.className = 'ranges-list'; rl.id = 'ranges-list';
+  sec.appendChild(rl);
+  const btnAdd = document.createElement('button'); btnAdd.type = 'button'; btnAdd.className = 'btn-add'; btnAdd.textContent = '+ Añadir rango de fechas';
+  btnAdd.addEventListener('click', () => { addDateRange(); triggerSave(); });
+  sec.appendChild(btnAdd);
+  card.appendChild(sec);
+  addDateRange();
+
+  // Días stepper
+  const diasRow = document.createElement('div'); diasRow.className = 'dias-row';
+  const diasLbl = document.createElement('span'); diasLbl.style.cssText = 'font-size:0.9rem;color:var(--muted)'; diasLbl.textContent = 'Días máximos de viaje:';
+  diasRow.append(diasLbl, buildStepper(() => diasVal, v => { diasVal = v; }, 1, 30, 'dias-val'));
+  card.appendChild(diasRow);
+
+  // Toggles
+  const tw = document.createElement('div'); tw.className = 'toggle-wrap';
+  [['solo-finde','Solo puedo fines de semana'],
+   ['me-da-igual','Me da igual entre semana o fin de semana'],
+   ['puente','Mejor si hay puente / festivo']].forEach(([id, text]) => {
+    const lbl = document.createElement('label'); lbl.className = 'toggle-label';
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.id = id;
+    const pill = document.createElement('span'); pill.className = 'toggle-pill';
+    lbl.append(inp, pill, document.createTextNode(' ' + text));
+    inp.addEventListener('change', triggerSave);
+    tw.appendChild(lbl);
+  });
+  card.appendChild(tw);
+}
+
+
+function buildQuestionCard(q, idx) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.qid = q.id;
+
+  const title = document.createElement('div');
+  title.className = 'card-title';
+  title.innerHTML = `<span class="num">${idx + 1}</span> ${esc(q.label)}`;
+  card.appendChild(title);
+
+  switch (q.tipo) {
+    case 'checkbox':       buildCheckbox(card, q);       break;
+    case 'voto-ponderado': buildVotoPonderado(card, q);  break;
+    case 'casas':          buildCasas(card, q);           break;
+    case 'slider':         buildSlider(card, q);          break;
+    case 'radio':          buildRadio(card, q);           break;
+    case 'textarea':       buildTextarea(card, q);        break;
+    case 'disponibilidad': buildDisponibilidad(card, q);  break;
+    default: break;
+  }
+  return card;
+}
+
+function addDateRange(desde = null, hasta = null) {
+  rangeCount++;
+  const id  = rangeCount;
+  const hoy = new Date().toISOString().split('T')[0];
+  const row = document.createElement('div'); row.className = 'date-range-row'; row.id = 'range-' + id;
+  const minAttr = (desde || hasta) ? '' : `min="${hoy}"`;
+  row.innerHTML = `<label>Desde</label><input type="date" class="range-from" ${minAttr}><span class="sep">→</span><label>Hasta</label><input type="date" class="range-to" ${minAttr}><button type="button" class="btn-remove" title="Quitar">✕</button>`;
+  if (desde) row.querySelector('.range-from').value = desde;
+  if (hasta) row.querySelector('.range-to').value   = hasta;
+  row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
+  row.querySelectorAll('input').forEach(i => i.addEventListener('change', triggerSave));
+  document.getElementById('ranges-list')?.appendChild(row);
+}
+
+// ── STEPPER ───────────────────────────────────────────────────────────────────
+function buildStepper(getter, setter, min, max, spanId) {
+  const wrap = document.createElement('div'); wrap.className = 'stepper';
+  const m  = document.createElement('button'); m.type = 'button'; m.textContent = '−';
+  const sp = document.createElement('span');  sp.id = spanId; sp.textContent = getter();
+  const p  = document.createElement('button'); p.type = 'button'; p.textContent = '+';
+  m.addEventListener('click', () => { const v = Math.max(min, getter()-1); setter(v); sp.textContent = v; triggerSave(); });
+  p.addEventListener('click', () => { const v = Math.min(max, getter()+1); setter(v); sp.textContent = v; triggerSave(); });
+  wrap.append(m, sp, p);
+  return wrap;
+}
+
+function refreshPC(qid) {
+  document.querySelectorAll(`.opt-item[data-qid="${qid}"]`).forEach(item => {
+    const val = item.dataset.val;
+    const entries = proscontras.filter(e => e.qid === qid && e.optKey === val);
+    const panel = item.querySelector('.pc-panel');
+    const badge = item.querySelector('.pc-badge');
+    if (!panel || !badge) return;
+
+    // Actualizar conteo visual (Badge)
+    const pros = entries.filter(e => e.tipo === 'pro').length;
+    const cons = entries.filter(e => e.tipo === 'contra').length;
+    badge.innerHTML = pros + cons === 0
+      ? `<span style="color:var(--muted);font-size:0.75rem">+ pros/contras</span>`
+      : (pros ? `<span class="pc-pro">▲ ${pros}</span>` : '') +
+        (cons ? `<span class="pc-con">▼ ${cons}</span>` : '');
+
+    // 1. Limpieza Quirúrgica
+    panel.querySelectorAll('.pc-entry').forEach(el => el.remove());
+
+    // 2. Gestión del formulario (Persistencia de foco)
+    let addRow = panel.querySelector('.pc-add-row');
+    if (!addRow) {
+      addRow = document.createElement('div'); 
+      addRow.className = 'pc-add-row';
+      
+      const inp = document.createElement('input'); 
+      inp.type = 'text'; inp.placeholder = 'Escribe tu argumento…';
+      
+      const bPro = document.createElement('button'); 
+      bPro.type = 'button'; bPro.className = 'btn-pc btn-pc-pro'; bPro.textContent = '✓ Pro';
+      
+      const bCon = document.createElement('button'); 
+      bCon.type = 'button'; bCon.className = 'btn-pc btn-pc-contra'; bCon.textContent = '✗ Contra';
+      
+      bPro.addEventListener('click', () => submitPC(qid, val, 'pro', inp));
+      bCon.addEventListener('click', () => submitPC(qid, val, 'contra', inp));
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') bPro.click(); });
+      
+      addRow.append(inp, bPro, bCon);
+      panel.appendChild(addRow);
+    }
+
+    // 3. Inyección Topológica: Añadir argumentos encima del input
+    entries.forEach(e => {
+      const row = document.createElement('div'); row.className = 'pc-entry';
+      const tipo = document.createElement('span'); 
+      tipo.className = `pc-tipo ${e.tipo}`; tipo.textContent = e.tipo === 'pro' ? '✓' : '✗';
+      const txt = document.createElement('span'); txt.className = 'pc-texto'; txt.textContent = e.texto;
+      const aut = document.createElement('span'); aut.className = 'pc-autor'; aut.textContent = '— ' + e.autor;
+      
+      row.append(tipo, txt, aut);
+      panel.insertBefore(row, addRow);
+    });
+  });
+}
+
+
+function renderVotosPublicos() {
+  const container = document.getElementById('aus-votos-publicos');
+  const listCandidatos = document.getElementById('aus-votos-candidatos');
+  
+  // Only show if there are actual votes recorded
+  if (!ausencias || ausencias.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  listCandidatos.innerHTML = '';
+
+  // Aggregate votes: How many votes did each person receive?
+  const conteoVotos = {};
+  ausencias.forEach(voto => {
+    if (voto.candidatos && Array.isArray(voto.candidatos)) {
+      voto.candidatos.forEach(candidato => {
+        if (!conteoVotos[candidato]) conteoVotos[candidato] = [];
+        conteoVotos[candidato].push(voto.votante);
+      });
+    }
+  });
+
+  // Render the aggregated data
+  if (Object.keys(conteoVotos).length === 0) {
+    listCandidatos.innerHTML = '<div style="font-size:0.8rem;color:var(--muted)">Aún no hay predicciones de ausencias.</div>';
+  } else {
+    for (const [candidato, votantes] of Object.entries(conteoVotos)) {
+      const row = document.createElement('div');
+      row.className = 'aus-voto-row';
+      row.innerHTML = `
+        <span class="aus-voto-name">${esc(candidato)}</span>
+        <span style="color:var(--muted);font-size:0.75rem">sospechoso/a para:</span>
+        <span class="aus-voto-victims">${esc(votantes.join(', '))}</span>
+      `;
+      listCandidatos.appendChild(row);
+    }
+  }
+}
+
+
+function renderAusencias() {
+  const card = document.getElementById('ausencias-card');
+  if (respondentes.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const list = document.getElementById('aus-respondentes-list');
+  list.innerHTML = '';
+
+  // 1. Restore previous vote state for the current user
+  const myVote = ausencias.find(a => a.votante === user?.nombre);
+  
+  // Restore probability slider
+  const probSlider = document.getElementById('aus-prob-slider');
+  const probDisplay = document.getElementById('aus-prob-display');
+  if (myVote && myVote.mi_probabilidad !== undefined) {
+    probSlider.value = myVote.mi_probabilidad;
+    probDisplay.textContent = myVote.mi_probabilidad + '%';
+    const pct = (myVote.mi_probabilidad / 100) * 100;
+    probSlider.style.setProperty('--pct', pct + '%');
+  }
+
+  // 2. Build the list of respondents to vote on
+  respondentes.forEach(r => {
+    // Prevent voting for someone who hasn't registered yet, though technically
+    // 'respondentes' implies they have. We show everyone in the list.
+    const item = document.createElement('div'); 
+    item.className = 'opt-item';
+    
+    const lbl  = document.createElement('label'); 
+    lbl.className = 'opt-label';
+    
+    const inp  = document.createElement('input');
+    inp.type = 'checkbox'; 
+    inp.value = r.nombre; 
+    inp.className = 'aus-check';
+    
+    // Check the box if the user previously voted for this person
+    if (myVote?.candidatos?.includes(r.nombre)) {
+      inp.checked = true;
+    }
+    
+    const chk  = document.createElement('span'); 
+    chk.className = 'check';
+    
+    const txt  = document.createElement('span'); 
+    txt.textContent = r.nombre;
+    
+    lbl.append(inp, chk, txt);
+
+    // Show the respondent's declared probability if available
+    if (r.prob_asistencia != null) { 
+      const prob = document.createElement('span');
+      prob.style.cssText = 'margin-left:auto;font-size:0.78rem;color:var(--muted)'; 
+      prob.textContent = r.prob_asistencia + '% (su est.)'; 
+      lbl.append(prob); 
+    }
+    
+    inp.addEventListener('change', triggerSave);
+    item.appendChild(lbl);
+    list.appendChild(item);
+  });
+
+  // 3. Render Public Votes (Who voted for whom)
+  renderVotosPublicos();
+}
+</script>
