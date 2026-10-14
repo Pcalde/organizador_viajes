@@ -116,11 +116,18 @@ function collectAnswers() {
 
 function validarRespuestas() {
   for (const q of schema) {
-    if (q.tipo !== 'disponibilidad') continue;
     const card = cardFor(q.id);
     if (!card) continue;
-    const malo = TIPOS.disponibilidad.read(card, q).rangos.find(r => r.desde && r.hasta && r.hasta < r.desde);
-    if (malo) return `Rango de fechas inválido (${malo.desde} → ${malo.hasta}): el fin no puede ser anterior al inicio.`;
+
+    if (q.tipo === 'disponibilidad') {
+      const malo = TIPOS.disponibilidad.read(card, q).rangos.find(r => r.desde && r.hasta && r.hasta < r.desde);
+      if (malo) return `Rango de fechas inválido (${malo.desde} → ${malo.hasta}): el fin no puede ser anterior al inicio.`;
+    }
+    if (q.tipo === 'horarios') {
+      const st = TIPOS.horarios.read(card, q);
+      const restMala = (st.restricciones || []).find(r => r.desde && r.hasta && r.hasta <= r.desde);
+      if (restMala) return `Restricción horaria inválida (${restMala.desde} → ${restMala.hasta}): la hora de fin debe ser posterior a la de inicio.`;
+    }
   }
   return null;
 }

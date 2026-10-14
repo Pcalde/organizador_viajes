@@ -88,9 +88,33 @@ function buildQuestionCard(q, idx) {
     }
   });
 
-  btnDel.addEventListener('click', async () => {
+  // Panel de confirmación inline para eliminar la pregunta completa (sin window.confirm)
+  const delBox = div('q-edit-inline');
+  delBox.style.display = 'none';
+  delBox.style.borderColor = 'var(--accent)';
+  delBox.innerHTML = `
+    <div class="inline-confirm-bar" style="width:100%">
+      <span>¿Seguro que quieres eliminar la sección <b>«${esc(q.label)}»</b> para todo el grupo?</span>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn-pc btn-qdel-cancel">Cancelar</button>
+        <button type="button" class="btn-pc btn-pc-contra btn-qdel-confirm">Sí, eliminar pregunta</button>
+      </div>
+    </div>
+  `;
+  card.appendChild(delBox);
+
+  btnDel.addEventListener('click', () => {
+    editBox.style.display = 'none';
+    delBox.style.display = delBox.style.display === 'none' ? 'flex' : 'none';
+  });
+  delBox.querySelector('.btn-qdel-cancel').addEventListener('click', () => {
+    delBox.style.display = 'none';
+  });
+  delBox.querySelector('.btn-qdel-confirm').addEventListener('click', async () => {
     if (!user) return;
-    if (!confirm(`¿Seguro que quieres eliminar la pregunta «${q.label}» para todo el grupo?`)) return;
+    const cBtn = delBox.querySelector('.btn-qdel-confirm');
+    cBtn.disabled = true;
+    cBtn.textContent = 'Eliminando…';
     try {
       await apiAuth({
         action: 'delete_pregunta',
@@ -103,6 +127,8 @@ function buildQuestionCard(q, idx) {
       showStatus('Pregunta eliminada', 'ok', 2500);
       pollOnce();
     } catch (e) {
+      cBtn.disabled = false;
+      cBtn.textContent = 'Sí, eliminar pregunta';
       showStatus('No se pudo eliminar la pregunta: ' + e.message, 'err');
     }
   });

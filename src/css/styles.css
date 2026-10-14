@@ -563,3 +563,125 @@ input[type="range"]::-moz-range-thumb {
 .opt-row-with-crud {
   display: flex; align-items: center; gap: 6px;
 }
+/* ── EDITOR VISUAL DE OPCIONES Y CONFIRMACIÓN INLINE ───────────────────── */
+.opt-edit-drawer {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 12px 14px;
+  margin-top: -4px;
+  margin-bottom: 4px;
+  flex-direction: column;
+  gap: 10px;
+  animation: fadeSlideDown 0.14s ease-out;
+}
+.opt-edit-drawer.mode-delete {
+  background: #fdf0ec;
+  border-color: #f3c6b8;
+}
+
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.opt-edit-single {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.opt-edit-single input[type="text"] {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  background: var(--card);
+}
+.opt-edit-single .btn-propose {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  align-self: center;
+}
+
+.opt-edit-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.opt-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.opt-edit-field label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.opt-edit-field input[type="text"] {
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  background: var(--card);
+}
+
+.opt-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.opt-edit-actions .btn-propose {
+  padding: 7px 14px;
+  font-size: 0.82rem;
+}
+
+.inline-confirm-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.83rem;
+  color: var(--ink);
+}
+/* ── PLANIFICACIÓN HORARIA Y RESTRICCIONES (Clases, Trabajo, Exámenes) ── */
+.day-slots-list, .restricciones-list {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 10px;
+}
+.day-slot-row, .restriccion-row {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.day-slot-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.slot-date-inp, .rest-fecha, .rest-desde, .rest-hasta {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+  background: var(--card); font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: var(--ink);
+}
+.franjas-pills-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 6px;
+}
+.franja-pill {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 8px 6px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--muted); cursor: pointer;
+  font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+}
+.franja-pill span { font-size: 0.82rem; font-weight: 600; }
+.franja-pill small { font-size: 0.7rem; opacity: 0.8; margin-top: 2px; }
+.franja-pill.active {
+  background: #eef5f0; border-color: var(--accent2); color: var(--accent2);
+}
+
+.rest-grid {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.rest-grid .rest-motivo { width: auto; flex: 1; min-width: 165px; padding: 7px 10px; background: var(--card); }
+.rest-time-pair { display: flex; align-items: center; gap: 6px; }
+.rest-sub-opts {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap;
+}
