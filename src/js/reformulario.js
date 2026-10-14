@@ -78,7 +78,7 @@ function buildModelData() {
   const qPrec  = schema.find(q => q.id === 'precio' || q.tipo === 'slider');
   const qCasas = schema.find(q => q.tipo === 'casas');
   const qOpts  = schema.find(q => q.id === 'opciones-destino' || q.tipo === 'checkbox' || q.tipo === 'voto-ponderado');
-
+  
   const viajeros = [];
   const allDatesSet = new Set();
 
@@ -180,8 +180,11 @@ function buildModelData() {
     });
   });
 
-  const lMaxEval = Math.min(12, Math.max(2, ...viajeros.map(v => v.diasMax)));
-  return { viajeros, indiceFechas, matriz, lMaxEval };
+  // Dentro de buildModelData() en js/reformulario.js, reemplaza el final por:
+  const hayPlanDia = viajeros.some(v => v.diasMax === 1 || v.irYVenir || v.conjuntoFechas.size === 1);
+  const lMinEval = hayPlanDia ? 1 : 2;
+  const lMaxEval = Math.min(12, Math.max(lMinEval, ...viajeros.map(v => v.diasMax)));
+  return { viajeros, indiceFechas, matriz, lMinEval, lMaxEval };
 }
 
 // ── 3. GENERACIÓN DE TRAYECTORIAS ÓPTIMAS (Port de trayectorias.py) ─────────
@@ -486,12 +489,12 @@ function ejecutarMotorFactibilidad(model) {
   const candidatosBrutos = [];
   const diagnosticos = [];
 
-  for (let L = 2; L <= lMaxEval; L++) {
+  const lMin = model.lMinEval || 1; // Permite evaluar excursiones de 1 día (L = 1)
+  for (let L = lMin; L <= lMaxEval; L++) {
     for (let i = 0; i <= indiceFechas.length - L; i++) {
       const diasRango = indiceFechas.slice(i, i + L);
       const fIni = diasRango[0], fFin = diasRango[diasRango.length - 1];
 
-      // Elegibilidad como núcleo: disponible toda la ventana y diasMax >= L
       const nombresNucleo = viajeros
         .filter(v => v.diasMax >= L && diasRango.every(d => matriz[d][v.nombre] === 1))
         .map(v => v.nombre);
@@ -499,11 +502,11 @@ function ejecutarMotorFactibilidad(model) {
       if (nombresNucleo.length < 2) continue;
 
       const nucleoSet = new Set(nombresNucleo);
-      // Satélites: disponibles >= 2 días dentro de la ventana y no pertenecientes al núcleo
+      const minSatDays = L === 1 ? 1 : 2;
       const satelites = viajeros.filter(v => {
         if (nucleoSet.has(v.nombre)) return false;
         const diasEnVentana = diasRango.reduce((s, d) => s + matriz[d][v.nombre], 0);
-        return diasEnVentana >= 2;
+        return diasEnVentana >= minSatDays;
       });
 
       const dfCandidatos = [
@@ -1078,6 +1081,9 @@ function buildAnalyticalCard(q, idx, myAns) {
     case 'textarea':
       buildTextareaConsensus(card, q);
       break;
+    case 'horarios':
+      buildHorariosConsensus(card, q, myVal);
+      break;
   }
   return card;
 }
@@ -1422,5 +1428,252 @@ function buildTextareaConsensus(card, q) {
     item.innerHTML = `<strong>${esc(n.nombre)}:</strong> <span>${esc(n.texto)}</span>`;
     wrap.appendChild(item);
   });
+  card.appendChild(wrap);
+}
+// ── OPTIMIZADOR DE VENTANAS HORARIAS Y RESTRICCIONES (Comidas, Cine, Clases…) ──
+
+function parseHHMM(str) {
+  if (!str) return null;
+  const [h, m] = String(str).split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h + m / 60;
+}
+
+function fmtHourFloat(h) {
+  const norm = h >= 24 ? h - 24 : h;
+  const hh = String(Math.floor(norm)).padStart(2, '0');
+  const mm = Math.round((norm - Math.floor(norm)) * 60) === 30 ? '30' : '00';
+  return `${hh}:${mm}`;
+}
+
+const ICONO_MOTIVO = {
+  clase:   '📚 Clase',
+  trabajo: '💼 Trabajo',
+  examen:  '📝 Examen',
+  otro:    '⏳ Compromiso',
+};
+
+function buildHorariosConsensus(card, q, myVal) {
+  const participantes = [];
+  const fechasSet = new Set();
+  const duraciones = [];
+
+  respuestas.forEach(r => {
+    const v = extractAnswer(r.answers, q);
+    if (!v || !Array.isArray(v.disponibilidades)) return;
+    if (v.duracionHoras) duraciones.push(Number(v.duracionHoras));
+
+    const dispPorFecha = new Map();
+    v.disponibilidades.forEach(d => {
+      if (!d.fecha || !Array.isArray(d.franjas) || !d.franjas.length) return;
+      fechasSet.add(d.fecha);
+      const prev = dispPorFecha.get(d.fecha) || new Set();
+      d.franjas.forEach(f => prev.add(f));
+      dispPorFecha.set(d.fecha, prev);
+    });
+
+    if (dispPorFecha.size > 0) {
+      participantes.push({
+        nombre: r.nombre,
+        p: getEffectiveProb(r.nombre),
+        dispPorFecha,
+        restricciones: Array.isArray(v.restricciones) ? v.restricciones : [],
+      });
+    }
+  });
+
+  if (!participantes.length || !fechasSet.size) {
+    card.innerHTML += `<p style="color:var(--muted);font-size:0.85rem">Aún no hay disponibilidades horarias registradas.</p>`;
+    return;
+  }
+
+  duraciones.sort((a, b) => a - b);
+  const durIdeal = duraciones.length ? duraciones[Math.floor(duraciones.length / 2)] : (q.config?.duracionIdeal || 3);
+  const fechasOrdenadas = [...fechasSet].sort();
+
+  // Malla temporal: de 10:00 a 26:00 (02:00 AM) en pasos de 0.5h (32 slots)
+  const SLOTS = [];
+  for (let t = 10.0; t < 26.5; t += 0.5) SLOTS.push(t);
+  const reqSlots = Math.max(2, Math.round(durIdeal * 2)); // nº de medias horas consecutivas
+
+  const mejoresVentanas = [];
+
+  fechasOrdenadas.forEach(fecha => {
+    // Para cada participante, calcular qué slots de media hora tiene libres y qué restricciones le afectan hoy
+    const estadoUsuarioDia = participantes.map(u => {
+      const franjasHoy = u.dispPorFecha.get(fecha);
+      if (!franjasHoy) return { ...u, freeSlots: new Set(), motivosHoy: [] };
+
+      const restHoy = u.restricciones.filter(r => !r.fecha || r.fecha === fecha);
+      const freeSlots = new Set();
+
+      SLOTS.forEach(t => {
+        // ¿Pertenece a alguna franja marcada por el usuario?
+        const inFranja = FRANJAS_HORARIAS.some(f => franjasHoy.has(f.id) && t >= f.start && t < f.end);
+        if (!inFranja) return;
+
+        // ¿Choca con alguna restricción horaria?
+        const choca = restHoy.some(r => {
+          const rIni = parseHHMM(r.desde);
+          let rFin   = parseHHMM(r.hasta);
+          if (rIni == null || rFin == null) return false;
+          if (rFin <= rIni) rFin += 24;
+          return t >= rIni && t < rFin;
+        });
+
+        if (!choca) freeSlots.add(t);
+      });
+
+      return { ...u, freeSlots, restHoy };
+    });
+
+    // Evaluar cada ventana contigua de longitud `reqSlots` (durIdeal horas)
+    for (let i = 0; i <= SLOTS.length - reqSlots; i++) {
+      const winSlots = SLOTS.slice(i, i + reqSlots);
+      const tStart = winSlots[0];
+      const tEnd   = winSlots[winSlots.length - 1] + 0.5;
+
+      const nucleo = [];
+      const satelites = [];
+      const bloqueados = [];
+
+      estadoUsuarioDia.forEach(u => {
+        const libresEnWin = winSlots.filter(t => u.freeSlots.has(t));
+        if (libresEnWin.length === winSlots.length) {
+          nucleo.push(u.nombre);
+        } else if (libresEnWin.length >= Math.max(2, Math.floor(reqSlots / 2))) {
+          // Satélite horario: puede al menos la mitad del plan (ej. se incorpora al salir de clase/trabajo)
+          const tJoin  = libresEnWin[0];
+          const tLeave = libresEnWin[libresEnWin.length - 1] + 0.5;
+          const causa  = (u.restHoy && u.restHoy.length) ? (ICONO_MOTIVO[u.restHoy[0].motivo] || 'Restricción') : 'Franja parcial';
+          const nota   = tJoin > tStart
+            ? `se une a las ${fmtHourFloat(tJoin)} tras ${causa}`
+            : `sale a las ${fmtHourFloat(tLeave)} por ${causa}`;
+          satelites.push({ nombre: u.nombre, nota });
+        } else {
+          const causa = (u.restHoy && u.restHoy.length)
+            ? `${ICONO_MOTIVO[u.restHoy[0].motivo]} (${u.restHoy[0].desde}–${u.restHoy[0].hasta})`
+            : 'Sin disponibilidad';
+          bloqueados.push({ nombre: u.nombre, causa });
+        }
+      });
+
+      if (nucleo.length >= 1 && (nucleo.length + satelites.length) >= 2) {
+        const score = nucleo.length * 10 + satelites.length * 4;
+        mejoresVentanas.push({
+          fecha,
+          tStart,
+          tEnd,
+          nucleo,
+          satelites,
+          bloqueados,
+          total: nucleo.length + satelites.length,
+          score,
+        });
+      }
+    }
+  });
+
+  mejoresVentanas.sort((a, b) => (b.score - a.score) || (b.nucleo.length - a.nucleo.length));
+
+  // Filtrar ventanas solapadas en el mismo día y tramo para mostrar las 4 mejores alternativas
+  const topWin = [];
+  for (const w of mejoresVentanas) {
+    const solapaMismoDia = topWin.some(tw => tw.fecha === w.fecha && Math.abs(tw.tStart - w.tStart) < 2.5);
+    if (!solapaMismoDia) {
+      topWin.push(w);
+      if (topWin.length >= 4) break;
+    }
+  }
+
+  // Recopilar todas las restricciones activas del grupo para hacerlas visibles
+  const todasRestricciones = [];
+  participantes.forEach(u => {
+    u.restricciones.forEach(r => {
+      todasRestricciones.push({ nombre: u.nombre, ...r });
+    });
+  });
+
+  const wrap = div('ref-horarios-wrap');
+  wrap.innerHTML = `
+    <div style="font-size:0.83rem;color:var(--muted);margin-bottom:12px">
+      Duración objetivo mediana: <b>${durIdeal} horas</b> · Evaluando compatibilidad horaria y bloqueos de clase/trabajo/exámenes:
+    </div>
+
+    <!-- 1. TOP VENTANAS HORARIAS FACTIBLES -->
+    <div class="ref-windows-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:16px">
+      ${topWin.length ? topWin.map((w, idx) => `
+        <div class="sol-log-box" style="border-left:3px solid ${idx === 0 ? 'var(--accent2)' : 'var(--accent3)'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <strong style="font-size:0.92rem">📅 ${fmtShortDate(w.fecha)} · ${fmtHourFloat(w.tStart)} →${fmtHourFloat(w.tEnd)}</strong>
+            <span class="sol-badge ok">${w.total}/${participantes.length} asisten</span>
+          </div>
+          <div style="font-size:0.8rem;margin-bottom:4px">
+            <b>Puntuales (${w.nucleo.length}):</b>${w.nucleo.map(esc).join(', ')}
+          </div>
+          ${w.satelites.length ? `
+            <div style="font-size:0.78rem;color:var(--accent3);margin-bottom:4px">
+              <b>Incorporación parcial (${w.satelites.length}):</b>
+              ${w.satelites.map(s => `${esc(s.nombre)} <em>(${esc(s.nota)})</em>`).join(' · ')}
+            </div>
+          ` : ''}
+          ${w.bloqueados.length ? `
+            <div style="font-size:0.76rem;color:var(--accent)">
+              <b>No pueden:</b> ${w.bloqueados.map(b => `${esc(b.nombre)} [${esc(b.causa)}]`).join(', ')}
+            </div>
+          ` : `<div style="font-size:0.76rem;color:var(--accent2)">✓ ¡Sin bajas horarias!</div>`}
+        </div>
+      `).join('') : `<div class="muted-note">No se encontraron tramos continuos de ${durIdeal}h para al menos 2 personas.</div>`}
+    </div>
+
+    <!-- 2. MATRIZ DE CALOR POR FRANJAS Y DÍAS -->
+    <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase">
+      Mapa de coincidencia por franja horaria
+    </div>
+    <div style="overflow-x:auto;margin-bottom:14px">
+      <table class="compat-matrix-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Fecha</th>
+            ${FRANJAS_HORARIAS.map(f => `<th>${f.label}<br><small style="font-weight:400;color:var(--muted)">${f.sub}</small></th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${fechasOrdenadas.map(fecha => `
+            <tr>
+              <th style="text-align:left">${fmtShortDate(fecha)}</th>${FRANJAS_HORARIAS.map(f => {
+                const libres = participantes.filter(u => u.dispPorFecha.get(fecha)?.has(f.id));
+                const alpha = (libres.length / Math.max(1, participantes.length)) * 0.55;
+                return `
+                  <td style="background:rgba(58,107,74,${alpha.toFixed(2)})" title="${libres.map(u => u.nombre).join(', ') || 'Nadie'}">
+                    <b>${libres.length}/${participantes.length}</b>
+                    <div style="font-size:0.68rem;color:var(--ink)">${libres.map(u => esc(u.nombre.slice(0, 6))).join(', ')}</div>
+                  </td>
+                `;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 3. LISTADO DE RESTRICCIONES HORARIAS ACTIVAS DEL GRUPO -->
+    ${todasRestricciones.length ? `
+      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase">
+        Restricciones declaradas (Clases, Trabajo, Exámenes)
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${todasRestricciones.map(r => `
+          <span class="voter-chip ${r.meUnoAlSalir ? '' : 'veto'}">
+            ${ICONO_MOTIVO[r.motivo] || '⏳'} <b>${esc(r.nombre)}</b>:
+            ${r.fecha ? fmtShortDate(r.fecha) + ' ' : 'Todos los días '}
+            ${esc(r.desde)}–${esc(r.hasta)}
+            ${r.meUnoAlSalir ? ' (⚡ se une al salir)' : ' (bloqueo total)'}
+          </span>
+        `).join('')}
+      </div>
+    ` : ''}
+  `;
+
   card.appendChild(wrap);
 }

@@ -166,6 +166,8 @@ function bindForms() {
     const v = this.value;
     $('add-q-opciones-wrap').style.display = ['checkbox', 'radio', 'voto-ponderado', 'casas'].includes(v) ? 'block' : 'none';
     $('add-q-slider-wrap').style.display   = v === 'slider' ? 'block' : 'none';
+    const sinOpciones = ['slider', 'disponibilidad', 'horarios', 'textarea'].includes(tipo);
+    $('add-q-opciones-wrap').style.display = sinOpciones ? 'none' : 'block';
     const first = document.querySelector('#add-q-opts-container input');
     if (first) first.placeholder = v === 'casas' ? 'Nombre de la casa (el precio se añade luego)' : 'Opción 1';
   });
