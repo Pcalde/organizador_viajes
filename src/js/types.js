@@ -429,7 +429,17 @@ function addDateRange(card, desde = null, hasta = null) {
   list.appendChild(row);
 }
 
-const TIPOS = {
+const TOGGLES_DISP = [
+  ['soloFinde',      'Solo puedo fines de semana'],
+  ['meDaIgual',      'Me da igual entre semana o fin de semana'],
+  ['preferirPuente', 'Mejor si hay puente / festivo'],
+];
+
+// NOTA: `var` es intencional. Los <script> clásicos comparten el scope global,
+// pero las declaraciones `const/let` viven en un "script scope" separado y NO
+// son visibles desde otros archivos .js (dan ReferenceError: X is not defined).
+// `var` sí crea la propiedad en window, haciendo TIPOS accesible al resto.
+var TIPOS = {
 
   checkbox: {
     build(card, q) {

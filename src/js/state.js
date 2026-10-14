@@ -2,24 +2,28 @@
 // `user.pinHash` vive SOLO en memoria (nunca en localStorage): si el hash
 // circulara por disco, cualquiera con acceso al navegador podría reenviarlo
 // y autenticarse sin conocer el PIN (el hash funciona como contraseña).
-let user            = null;  // { nombre, eid, pinHash? }
-let encuestaTitulo  = 'Cuestionario de viaje';
-let schema          = [];
-let proscontras     = [];
-let respondentes    = [];
-let respuestas      = [];
-let ausencias       = [];
-let debate          = [];
-let serverHasV2     = true;  // Detecta si _snapshot devuelve el campo `respuestas`
-let activeMode      = 'survey';
-let draftDirty      = false;
-let weightByProb    = true;
-let lastRaw         = '';
-let saveTimer       = null;
-let statusTimer     = null;
+// NOTA: se usa `var` a propósito. Cada archivo .js es un <script> clásico
+// independiente; con `const/let` estas variables quedarían en el "script
+// scope" de ESTE archivo y serían invisibles para los demás (ReferenceError).
+// Con `var` se cuelgan en window y son compartidas por toda la app.
+var user            = null;  // { nombre, eid, pinHash? }
+var encuestaTitulo  = 'Cuestionario de viaje';
+var schema          = [];
+var proscontras     = [];
+var respondentes    = [];
+var respuestas      = [];
+var ausencias       = [];
+var debate          = [];
+var serverHasV2     = true;  // Detecta si _snapshot devuelve el campo `respuestas`
+var activeMode      = 'survey';
+var draftDirty      = false;
+var weightByProb    = true;
+var lastRaw         = '';
+var saveTimer       = null;
+var statusTimer     = null;
 
 // ── UTILIDADES ──────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
+var $ = id => document.getElementById(id);
 
 function esc(s) {
   return String(s ?? '')
