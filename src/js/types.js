@@ -72,6 +72,23 @@ function createOptionCrudControls(item, q, rawOp) {
         </div>
       `;
     } else {
+      const nuevoTexto = prompt('Editar texto de la opción:', optKey);
+      if (!nuevoTexto || !nuevoTexto.trim() || nuevoTexto.trim() === optKey) return;
+      nuevaOpcion = nuevoTexto.trim();
+    }
+
+    try {
+      await apiAuth({
+        action: 'edit_opcion',
+        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+        questionId: qid, oldOptKey: optKey, nuevaOpcion,
+      });
+      await pollOnce();
+      renderAllQuestions();
+      restoreDraft();
+      showStatus('Opción actualizada', 'ok', 2000);
+    } catch (err) {
+      showStatus('No se pudo editar la opción: ' + err.message, 'err');
       drawer.innerHTML = `
         <div class="opt-edit-single">
           <input type="text" class="inp-eo-text" value="${esc(curLabel)}" placeholder="Texto de la opción…">

@@ -72,7 +72,7 @@ function buildQuestionCard(q, idx) {
       newCfg.step = Number(editBox.querySelector('.inp-eq-step').value) || 1;
     }
     try {
-      await api({
+      await apiAuth({
         action: 'edit_pregunta',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: q.id, label: newLabel, config: newCfg,
@@ -116,7 +116,7 @@ function buildQuestionCard(q, idx) {
     cBtn.disabled = true;
     cBtn.textContent = 'Eliminando…';
     try {
-      await api({
+      await apiAuth({
         action: 'delete_pregunta',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: q.id,

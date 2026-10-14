@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cuestionador de viajes</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="src/css/styles.css">
 </head>
 <body>
@@ -28,13 +29,17 @@
         <input type="text" id="login-nombre" placeholder="Como quieres aparecer en el grupo" autocomplete="name" maxlength="40">
       </div>
       <div class="login-field">
-        <label for="login-pin">PIN <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4–8 dígitos, solo tú lo sabes)</span></label>
-        <input type="password" id="login-pin" placeholder="••••" maxlength="8" inputmode="numeric" autocomplete="current-password">
+        <label for="login-pin">PIN <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4–8 dígitos o letras, solo tú lo sabes)</span></label>
+        <input type="password" id="login-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="current-password">
       </div>
       <div class="login-field">
         <label for="login-eid">ID de encuesta <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(minúsculas y guiones)</span></label>
         <input type="text" id="login-eid" placeholder="p.ej. pirineos-2026" autocomplete="off" maxlength="40">
       </div>
+      <label class="login-remember" style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;font-size:0.85rem;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="login-recordar" checked style="width:auto;margin:0">
+        Recordar sesión en este dispositivo (12 h)
+      </label>
 
       <!-- Campos extra solo al crear nuevo viaje -->
       <div id="create-trip-fields" style="display:none;flex-direction:column;gap:14px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">
@@ -176,8 +181,10 @@
 </div><!-- /survey-screen -->
 
 <script src="src/js/config.js"></script>
+<script src="src/js/crypto.js"></script>
 <script src="src/js/api.js"></script>
 <script src="src/js/state.js"></script>
+<script src="src/js/session.js"></script>
 <script src="src/js/types.js"></script>
 <script src="src/js/questions.js"></script>
 <script src="src/js/proscontras.js"></script>
