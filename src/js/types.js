@@ -21,25 +21,56 @@ function pcParts() {
 }
 
 // Controles de edición y borrado para cualquier opción
-function createOptionCrudControls(qid, optKey, isCasa = false, currentCasaObj = null) {
-  const wrap = div('opt-crud-btns');
+// ── EDITOR VISUAL INLINE Y BORRADO DE OPCIONES (Sin prompt/confirm) ─────────
+function createOptionCrudControls(item, q, rawOp) {
+  const qid    = q.id;
+  const isCasa = q.tipo === 'casas';
+  const isRad  = q.tipo === 'radio';
+  const optKey = optVal(q, rawOp);
+
+  // En radio "clave|etiqueta", mostramos la etiqueta en el editor pero preservamos la clave
+  const rawStr   = typeof rawOp === 'string' ? rawOp : '';
+  const hasPipe  = isRad && rawStr.includes('|');
+  const radKey   = hasPipe ? rawStr.split('|')[0] : '';
+  const curLabel = isCasa
+    ? (rawOp.nombre || '')
+    : (hasPipe ? rawStr.split('|').slice(1).join('|') : String(rawOp));
+
+  const wrap  = div('opt-crud-btns');
   const bEdit = document.createElement('button');
   bEdit.type = 'button'; bEdit.className = 'btn-opt-crud'; bEdit.title = 'Editar opción'; bEdit.textContent = '✎';
   const bDel  = document.createElement('button');
   bDel.type  = 'button'; bDel.className  = 'btn-opt-crud danger'; bDel.title = 'Eliminar opción'; bDel.textContent = '✕';
+  wrap.append(bEdit, bDel);
 
-  bEdit.addEventListener('click', async e => {
-    e.preventDefault(); e.stopPropagation();
-    if (!user) return;
-    let nuevaOpcion;
+  // Contenedor desplegable que se inserta dentro de .opt-item
+  const drawer = div('opt-edit-drawer');
+  drawer.style.display = 'none';
+
+  const openEditView = () => {
+    drawer.style.display = 'flex';
+    drawer.className = 'opt-edit-drawer mode-edit';
     if (isCasa) {
-      const nuevoNombre = prompt('Nombre del alojamiento:', (currentCasaObj && currentCasaObj.nombre) || optKey);
-      if (!nuevoNombre || !nuevoNombre.trim()) return;
-      const nuevoPrecio = prompt('Precio (ej. 450 € total):', (currentCasaObj && currentCasaObj.precio) || '');
-      if (nuevoPrecio === null) return;
-      const nuevaUrl    = prompt('Enlace URL (https://...):', (currentCasaObj && currentCasaObj.url) || '');
-      if (nuevaUrl === null) return;
-      nuevaOpcion = { nombre: nuevoNombre.trim(), precio: nuevoPrecio.trim(), url: safeUrl(nuevaUrl) };
+      drawer.innerHTML = `
+        <div class="opt-edit-grid">
+          <div class="opt-edit-field" style="flex:2;min-width:160px">
+            <label>Nombre del alojamiento</label>
+            <input type="text" class="inp-eo-nombre" value="${esc(rawOp.nombre || '')}" placeholder="Ej. Casa Rural El Pinar">
+          </div>
+          <div class="opt-edit-field" style="flex:1;min-width:100px">
+            <label>Precio</label>
+            <input type="text" class="inp-eo-precio" value="${esc(rawOp.precio || '')}" placeholder="Ej. 450 €">
+          </div>
+          <div class="opt-edit-field" style="flex:2;min-width:180px">
+            <label>Enlace (URL)</label>
+            <input type="text" class="inp-eo-url" value="${esc(rawOp.url || '')}" placeholder="https://...">
+          </div>
+        </div>
+        <div class="opt-edit-actions">
+          <button type="button" class="btn-pc btn-eo-cancel">Cancelar</button>
+          <button type="button" class="btn-propose btn-eo-save">Guardar cambios</button>
+        </div>
+      `;
     } else {
       const nuevoTexto = prompt('Editar texto de la opción:', optKey);
       if (!nuevoTexto || !nuevoTexto.trim() || nuevoTexto.trim() === optKey) return;
@@ -58,35 +89,281 @@ function createOptionCrudControls(qid, optKey, isCasa = false, currentCasaObj = 
       showStatus('Opción actualizada', 'ok', 2000);
     } catch (err) {
       showStatus('No se pudo editar la opción: ' + err.message, 'err');
+      drawer.innerHTML = `
+        <div class="opt-edit-single">
+          <input type="text" class="inp-eo-text" value="${esc(curLabel)}" placeholder="Texto de la opción…">
+          <button type="button" class="btn-pc btn-eo-cancel">Cancelar</button>
+          <button type="button" class="btn-propose btn-eo-save">Guardar</button>
+        </div>
+      `;
     }
-  });
 
-  bDel.addEventListener('click', async e => {
-    e.preventDefault(); e.stopPropagation();
-    if (!user) return;
-    if (!confirm(`¿Eliminar la opción «${optKey}» de esta pregunta?`)) return;
-    try {
-      await apiAuth({
-        action: 'delete_opcion',
-        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
-        questionId: qid, optKey,
-      });
-      const q = schema.find(x => x.id === qid);
-      if (q && Array.isArray(q.opciones)) {
-        q.opciones = q.opciones.filter(o => optVal(q, o) !== optKey);
+    const firstInp = drawer.querySelector('input');
+    if (firstInp) { firstInp.focus(); firstInp.select(); }
+
+    const closeDrawer = () => { drawer.style.display = 'none'; drawer.innerHTML = ''; };
+    drawer.querySelector('.btn-eo-cancel').addEventListener('click', closeDrawer);
+
+    const saveBtn = drawer.querySelector('.btn-eo-save');
+    saveBtn.addEventListener('click', async () => {
+      if (!user) return;
+      let nuevaOpcion, newKey;
+
+      if (isCasa) {
+        const nombre = drawer.querySelector('.inp-eo-nombre').value.trim();
+        const precio = drawer.querySelector('.inp-eo-precio').value.trim();
+        const url    = safeUrl(drawer.querySelector('.inp-eo-url').value);
+        if (!nombre) { drawer.querySelector('.inp-eo-nombre').focus(); return; }
+        nuevaOpcion = { nombre, precio, url };
+        newKey = nombre;
+      } else {
+        const txt = drawer.querySelector('.inp-eo-text').value.trim();
+        if (!txt) { drawer.querySelector('.inp-eo-text').focus(); return; }
+        nuevaOpcion = hasPipe ? `${radKey}|${txt}` : txt;
+        newKey = hasPipe ? radKey : txt;
       }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Guardando…';
+
+      // Conservar el estado actual del formulario antes de repintar
       const card = cardFor(qid);
-      const item = card && findItem(card, optKey);
-      if (item) item.remove();
-      showStatus('Opción eliminada', 'ok', 2000);
-      pollOnce();
-    } catch (err) {
-      showStatus('No se pudo eliminar la opción: ' + err.message, 'err');
+      const prevVal = (card && TIPOS[q.tipo]) ? TIPOS[q.tipo].read(card, q) : null;
+
+      try {
+        await api({
+          action: 'edit_opcion',
+          eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+          questionId: qid, oldOptKey: optKey, nuevaOpcion,
+        });
+
+        // Actualizar en memoria local
+        const idx = (q.opciones || []).findIndex(o => optVal(q, o) === optKey);
+        if (idx >= 0) q.opciones[idx] = nuevaOpcion;
+
+        renderAllQuestions();
+        restoreDraft();
+
+        // Si el usuario tenía seleccionada la opción renombrada, migrar su selección a newKey
+        const newCard = cardFor(qid);
+        if (newCard && prevVal != null && newKey !== optKey) {
+          if (q.tipo === 'checkbox' && Array.isArray(prevVal)) {
+            TIPOS.checkbox.write(newCard, q, prevVal.map(v => v === optKey ? newKey : v));
+          } else if (q.tipo === 'voto-ponderado' && typeof prevVal === 'object') {
+            if (optKey in prevVal) { prevVal[newKey] = prevVal[optKey]; delete prevVal[optKey]; }
+            TIPOS['voto-ponderado'].write(newCard, q, prevVal);
+          } else if (q.tipo === 'casas' && Array.isArray(prevVal)) {
+            TIPOS.casas.write(newCard, q, prevVal.map(c => (c.nombre === optKey ? { nombre: newKey, precio: nuevaOpcion.precio } : c)));
+          }
+          triggerSave();
+        }
+
+        showStatus('Opción actualizada', 'ok', 2000);
+        pollOnce();
+      } catch (err) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Guardar';
+        showStatus('No se pudo editar la opción: ' + err.message, 'err');
+      }
+    });
+
+    drawer.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter')  { ev.preventDefault(); saveBtn.click(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); closeDrawer(); }
+      });
+    });
+  };
+
+  const openDeleteView = () => {
+    drawer.style.display = 'flex';
+    drawer.className = 'opt-edit-drawer mode-delete';
+    drawer.innerHTML = `
+      <div class="inline-confirm-bar">
+        <span>¿Eliminar la opción <b>«${esc(curLabel)}»</b> para todo el grupo?</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn-pc btn-del-cancel">Cancelar</button>
+          <button type="button" class="btn-pc btn-pc-contra btn-del-confirm">Sí, eliminar</button>
+        </div>
+      </div>
+    `;
+
+    drawer.querySelector('.btn-del-cancel').addEventListener('click', () => {
+      drawer.style.display = 'none';
+      drawer.innerHTML = '';
+    });
+
+    const confirmBtn = drawer.querySelector('.btn-del-confirm');
+    confirmBtn.addEventListener('click', async () => {
+      if (!user) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Eliminando…';
+      try {
+        await api({
+          action: 'delete_opcion',
+          eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+          questionId: qid, optKey,
+        });
+        if (Array.isArray(q.opciones)) {
+          q.opciones = q.opciones.filter(o => optVal(q, o) !== optKey);
+        }
+        item.remove();
+        triggerSave();
+        showStatus('Opción eliminada', 'ok', 2000);
+        pollOnce();
+      } catch (err) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Sí, eliminar';
+        showStatus('No se pudo eliminar: ' + err.message, 'err');
+      }
+    });
+  };
+
+  bEdit.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (drawer.style.display !== 'none' && drawer.classList.contains('mode-edit')) {
+      drawer.style.display = 'none';
+    } else {
+      openEditView();
     }
   });
 
-  wrap.append(bEdit, bDel);
-  return wrap;
+  bDel.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (drawer.style.display !== 'none' && drawer.classList.contains('mode-delete')) {
+      drawer.style.display = 'none';
+    } else {
+      openDeleteView();
+    }
+  });
+
+  return { buttons: wrap, drawer };
+}
+
+// ── CONSTRUCTORES DE ÍTEMS CON DRAWER VISUAL INTEGRADO ──────────────────────
+function createOptItem(q, rawOp) {
+  const qObj = typeof q === 'object' ? q : (schema.find(x => x.id === q) || { id: q, tipo: 'checkbox' });
+  const val  = optVal(qObj, rawOp);
+  const item = div('opt-item');
+  item.dataset.qid = qObj.id;
+  item.dataset.val = val;
+
+  const row = div('opt-row-with-crud');
+  const lbl = document.createElement('label'); lbl.className = 'opt-label'; lbl.style.flex = '1';
+  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.value = val;
+  const chk = document.createElement('span');  chk.className = 'check';
+  const txt = document.createElement('span');  txt.style.flex = '1'; txt.textContent = val;
+  lbl.append(inp, chk, txt);
+  inp.addEventListener('change', triggerSave);
+
+  const crud = createOptionCrudControls(item, qObj, rawOp);
+  row.append(lbl, crud.buttons);
+
+  const [badge, panel] = pcParts();
+  item.append(row, crud.drawer, badge, panel);
+  return item;
+}
+
+function createPondItem(q, rawOp) {
+  const qObj = typeof q === 'object' ? q : (schema.find(x => x.id === q) || { id: q, tipo: 'voto-ponderado' });
+  const val  = optVal(qObj, rawOp);
+  const item = div('opt-item pond-item');
+  item.dataset.qid = qObj.id;
+  item.dataset.val = val;
+
+  const row  = div('pond-row');
+  const name = document.createElement('span');
+  name.style.cssText = 'font-size:0.9rem;font-weight:500;flex:1';
+  name.textContent = val;
+  const grp  = div('btn-group-pond');
+  const btns = [-1, 1, 3].map(s => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn-pond';
+    b.dataset.score = s; b.textContent = s > 0 ? '+' + s : String(s);
+    return b;
+  });
+  grp.append(...btns);
+
+  const crud = createOptionCrudControls(item, qObj, rawOp);
+  row.append(name, grp, crud.buttons);
+
+  btns.forEach(btn => btn.addEventListener('click', () => {
+    const score = btn.dataset.score, wasActive = btn.classList.contains('active');
+    btns.forEach(b => b.classList.remove('active'));
+    if (!wasActive) {
+      if (score === '3' || score === '-1') {
+        const list = item.closest('.options-list');
+        const conflicto = list && list.querySelector(`.btn-pond.active[data-score="${score}"]`);
+        if (conflicto) conflicto.classList.remove('active');
+      }
+      btn.classList.add('active');
+    }
+    const card = item.closest('.card');
+    if (card) updatePondRulesBar(card);
+    triggerSave();
+  }));
+
+  const [badge, panel] = pcParts();
+  item.append(row, crud.drawer, badge, panel);
+  return item;
+}
+
+function createCasaItem(q, op, n) {
+  const qObj = typeof q === 'object' ? q : (schema.find(x => x.id === q) || { id: q, tipo: 'casas' });
+  const item = div('opt-item');
+  item.dataset.qid = qObj.id;
+  item.dataset.val = op.nombre;
+
+  const row = div('casa-row');
+  const url = safeUrl(op.url);
+  const anchor = url ? document.createElement('a') : document.createElement('span');
+  anchor.className = 'casa-num' + (url ? '' : ' no-link');
+  if (url) {
+    anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
+    anchor.title = 'Abrir enlace del alojamiento';
+    anchor.addEventListener('click', e => e.stopPropagation());
+  }
+  anchor.textContent = n;
+
+  const lbl = document.createElement('label'); lbl.className = 'casa-label';
+  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.value = op.nombre;
+  const chk = document.createElement('span');  chk.className = 'check';
+  const txt = document.createElement('span');  txt.style.flex = '1'; txt.textContent = op.nombre;
+  lbl.append(inp, chk, txt);
+  inp.addEventListener('change', triggerSave);
+
+  const precio = document.createElement('span');
+  precio.className = 'casa-precio'; precio.textContent = op.precio || '';
+
+  const crud = createOptionCrudControls(item, qObj, op);
+  row.append(anchor, lbl, precio, crud.buttons);
+
+  const [badge, panel] = pcParts();
+  item.append(row, crud.drawer, badge, panel);
+  return item;
+}
+
+function createRadioItem(card, q, op) {
+  const s = String(op);
+  const [val, label] = s.includes('|') ? s.split('|') : [s, s];
+  const item = div('opt-item');
+  item.dataset.qid = q.id;
+  item.dataset.val = val;
+
+  const row = div('opt-row-with-crud');
+  const lbl = document.createElement('label'); lbl.className = 'opt-label'; lbl.style.flex = '1';
+  const inp = document.createElement('input'); inp.type = 'radio'; inp.name = 'radio-' + q.id; inp.value = val;
+  const chk = document.createElement('span');  chk.className = 'check check-radio';
+  lbl.append(inp, chk, document.createTextNode(' ' + label));
+  inp.addEventListener('change', () => {
+    toggleConditionalStepper(card, val);
+    triggerSave();
+  });
+
+  const crud = createOptionCrudControls(item, q, op);
+  row.append(lbl, crud.buttons);
+  item.append(row, crud.drawer);
+  return item;
 }
 
 function checkedValues(card) {
@@ -130,97 +407,6 @@ function updatePondRulesBar(card) {
   if (pm1) { pm1.classList.toggle('used', hasM1);      pm1.innerHTML = `✕ Veto (-1): <b>${hasM1 ? 'Asignado' : '1 disp.'}</b>`; }
 }
 
-// ── CONSTRUCTORES DE ÍTEMS ──────────────────────────────────────────────────
-function createOptItem(qid, val) {
-  const item = div('opt-item');
-  item.dataset.qid = qid;
-  item.dataset.val = val;
-
-  const row = div('opt-row-with-crud');
-  const lbl = document.createElement('label'); lbl.className = 'opt-label'; lbl.style.flex = '1';
-  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.value = val;
-  const chk = document.createElement('span');  chk.className = 'check';
-  const txt = document.createElement('span');  txt.style.flex = '1'; txt.textContent = val;
-  lbl.append(inp, chk, txt);
-  inp.addEventListener('change', triggerSave);
-
-  row.append(lbl, createOptionCrudControls(qid, val, false));
-  const [badge, panel] = pcParts();
-  item.append(row, badge, panel);
-  return item;
-}
-
-function createPondItem(qid, val) {
-  const item = div('opt-item pond-item');
-  item.dataset.qid = qid;
-  item.dataset.val = val;
-
-  const row  = div('pond-row');
-  const name = document.createElement('span');
-  name.style.cssText = 'font-size:0.9rem;font-weight:500;flex:1';
-  name.textContent = val;
-  const grp  = div('btn-group-pond');
-  const btns = [-1, 1, 3].map(s => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'btn-pond';
-    b.dataset.score = s; b.textContent = s > 0 ? '+' + s : String(s);
-    return b;
-  });
-  grp.append(...btns);
-  row.append(name, grp, createOptionCrudControls(qid, val, false));
-
-  btns.forEach(btn => btn.addEventListener('click', () => {
-    const score = btn.dataset.score, wasActive = btn.classList.contains('active');
-    btns.forEach(b => b.classList.remove('active'));
-    if (!wasActive) {
-      if (score === '3' || score === '-1') {
-        const list = item.closest('.options-list');
-        const conflicto = list && list.querySelector(`.btn-pond.active[data-score="${score}"]`);
-        if (conflicto) conflicto.classList.remove('active');
-      }
-      btn.classList.add('active');
-    }
-    const card = item.closest('.card');
-    if (card) updatePondRulesBar(card);
-    triggerSave();
-  }));
-
-  const [badge, panel] = pcParts();
-  item.append(row, badge, panel);
-  return item;
-}
-
-function createCasaItem(qid, op, n) {
-  const item = div('opt-item');
-  item.dataset.qid = qid;
-  item.dataset.val = op.nombre;
-
-  const row = div('casa-row');
-  const url = safeUrl(op.url);
-  const anchor = url ? document.createElement('a') : document.createElement('span');
-  anchor.className = 'casa-num' + (url ? '' : ' no-link');
-  if (url) {
-    anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
-    anchor.title = 'Abrir enlace del alojamiento';
-    anchor.addEventListener('click', e => e.stopPropagation());
-  }
-  anchor.textContent = n;
-
-  const lbl = document.createElement('label'); lbl.className = 'casa-label';
-  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.value = op.nombre;
-  const chk = document.createElement('span');  chk.className = 'check';
-  const txt = document.createElement('span');  txt.style.flex = '1'; txt.textContent = op.nombre;
-  lbl.append(inp, chk, txt);
-  inp.addEventListener('change', triggerSave);
-
-  const precio = document.createElement('span');
-  precio.className = 'casa-precio'; precio.textContent = op.precio || '';
-
-  row.append(anchor, lbl, precio, createOptionCrudControls(qid, op.nombre, true, op));
-  const [badge, panel] = pcParts();
-  item.append(row, badge, panel);
-  return item;
-}
 
 function toggleConditionalStepper(card, val) {
   const pw = card.querySelector('.plazas-wrap');
@@ -228,24 +414,7 @@ function toggleConditionalStepper(card, val) {
   if (pw && cs) pw.style.display = val === cs.when ? 'flex' : 'none';
 }
 
-function createRadioItem(card, q, op) {
-  const s = String(op);
-  const [val, label] = s.includes('|') ? s.split('|') : [s, s];
-  const row = div('opt-row-with-crud');
-  row.dataset.val = val;
 
-  const lbl = document.createElement('label'); lbl.className = 'opt-label'; lbl.style.flex = '1';
-  const inp = document.createElement('input'); inp.type = 'radio'; inp.name = 'radio-' + q.id; inp.value = val;
-  const chk = document.createElement('span');  chk.className = 'check check-radio';
-  lbl.append(inp, chk, document.createTextNode(' ' + label));
-  inp.addEventListener('change', () => {
-    toggleConditionalStepper(card, val);
-    triggerSave();
-  });
-
-  row.append(lbl, createOptionCrudControls(q.id, val, false));
-  return row;
-}
 
 function addDateRange(card, desde = null, hasta = null) {
   const list = card.querySelector('.ranges-list');
@@ -356,6 +525,83 @@ var TIPOS = {
       if (select) item.querySelector('input').checked = true;
       list.appendChild(item);
       return item;
+    },
+  },
+
+  // ── horarios (Planificación por franjas + Restricciones de clase/trabajo/examen) ──
+  horarios: {
+    build(card, q) {
+      const cfg = q.config || {};
+      card.state.duracion = createStepper(1, 12, cfg.duracionIdeal ?? 3, triggerSave);
+
+      const wrap = div('horarios-builder');
+      wrap.innerHTML = `
+        <div class="hor-section">
+          <div class="hor-sec-head">
+            <div>
+              <div style="font-size:0.88rem;font-weight:600">1. ¿Qué días y en qué franjas estás libre?</div>
+              <div style="font-size:0.78rem;color:var(--muted)">Marca las franjas posibles para cada fecha candidata (puedes pulsar varias por día).</div>
+            </div>
+          </div>
+          <div class="day-slots-list"></div>
+          <button type="button" class="btn-add btn-add-slot" style="margin-top:8px">+ Añadir fecha y franjas disponibles</button>
+        </div>
+
+        <div class="hor-section" style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--border)">
+          <div class="hor-sec-head">
+            <div>
+              <div style="font-size:0.88rem;font-weight:600">2. Restricciones horarias (Clases, Trabajo, Exámenes…)</div>
+              <div style="font-size:0.78rem;color:var(--muted)">Indica las horas exactas en las que estás ocupado para que el optimizador calcule si cuadramos antes, después o si te unes al salir.</div>
+            </div>
+          </div>
+          <div class="restricciones-list"></div>
+          <button type="button" class="btn-add btn-add-rest" style="margin-top:8px">+ Añadir restricción horaria (clase, turno, examen…)</button>
+        </div>
+
+        <div class="dias-row" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+          <span style="font-size:0.88rem;color:var(--muted)">Duración estimada que te apetece para el plan (horas):</span>
+          <div class="dur-stepper-slot"></div>
+        </div>
+      `;
+
+      wrap.querySelector('.dur-stepper-slot').appendChild(card.state.duracion.el);
+      wrap.querySelector('.btn-add-slot').addEventListener('click', () => { addDaySlotRow(card); triggerSave(); });
+      wrap.querySelector('.btn-add-rest').addEventListener('click', () => { addRestriccionRow(card); triggerSave(); });
+
+      card.appendChild(wrap);
+      addDaySlotRow(card);
+    },
+    read(card) {
+      const disponibilidades = [...card.querySelectorAll('.day-slot-row')].map(r => ({
+        fecha: r.querySelector('.slot-date-inp').value || null,
+        franjas: [...r.querySelectorAll('.franja-pill.active')].map(b => b.dataset.fid),
+      })).filter(d => d.fecha && d.franjas.length > 0);
+
+      const restricciones = [...card.querySelectorAll('.restriccion-row')].map(r => ({
+        motivo: r.querySelector('.rest-motivo').value,
+        fecha:  r.querySelector('.rest-fecha').value || null,
+        desde:  r.querySelector('.rest-desde').value || null,
+        hasta:  r.querySelector('.rest-hasta').value || null,
+        meUnoAlSalir: r.querySelector('.rest-join-after').checked,
+      })).filter(r => r.desde && r.hasta);
+
+      return {
+        disponibilidades,
+        restricciones,
+        duracionHoras: card.state.duracion.get(),
+      };
+    },
+    write(card, q, v) {
+      if (!v) return;
+      if (v.duracionHoras && card.state.duracion) card.state.duracion.set(v.duracionHoras);
+      if (Array.isArray(v.disponibilidades) && v.disponibilidades.length) {
+        card.querySelector('.day-slots-list').innerHTML = '';
+        v.disponibilidades.forEach(d => addDaySlotRow(card, d));
+      }
+      if (Array.isArray(v.restricciones)) {
+        card.querySelector('.restricciones-list').innerHTML = '';
+        v.restricciones.forEach(r => addRestriccionRow(card, r));
+      }
     },
   },
 
@@ -520,3 +766,101 @@ var TIPOS = {
     },
   },
 };
+// ── DEFINICIÓN DE FRANJAS Y MOTIVOS HORARIOS (Añadir en js/types.js) ────────
+const FRANJAS_HORARIAS = [
+  { id: 'manana', label: '☀️ Mañana', sub: '10:00–14:00', start: 10.0, end: 14.0 },
+  { id: 'comida', label: '🍽️ Comida', sub: '14:00–17:00', start: 14.0, end: 17.0 },
+  { id: 'tarde',  label: '🎬 Tarde',  sub: '17:00–20:30', start: 17.0, end: 20.5 },
+  { id: 'cena',   label: '🍷 Cena',   sub: '20:30–00:00', start: 20.5, end: 24.0 },
+  { id: 'noche',  label: '🌙 Noche',  sub: '00:00–02:30', start: 24.0, end: 26.5 },
+];
+
+const MOTIVOS_RESTRICCION = [
+  { id: 'clase',   label: '📚 Clase / Prácticas' },
+  { id: 'trabajo', label: '💼 Trabajo / Turno' },
+  { id: 'examen',  label: '📝 Examen / Entrega' },
+  { id: 'otro',    label: '⏳ Otro compromiso' },
+];
+
+// Actualiza TOGGLES_DISP en js/types.js para incluir planes de ir y venir:
+const TOGGLES_DISP = [
+  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
+  ['soloFinde',      'Solo puedo fines de semana'],
+  ['meDaIgual',      'Me da igual entre semana o fin de semana'],
+  ['preferirPuente', 'Mejor si hay puente / festivo'],
+];
+
+function addDaySlotRow(card, data = null) {
+  const list = card.querySelector('.day-slots-list');
+  if (!list) return;
+  const row = div('day-slot-row');
+  const fechaVal = (data && data.fecha) ? data.fecha : hoyLocal();
+  const activeFranjas = new Set((data && Array.isArray(data.franjas)) ? data.franjas : ['comida', 'tarde', 'cena']);
+
+  row.innerHTML = `
+    <div class="day-slot-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:0.8rem;color:var(--muted)">Día:</label>
+        <input type="date" class="slot-date-inp" value="${esc(fechaVal)}">
+      </div>
+      <button type="button" class="btn-remove" title="Quitar día">✕</button>
+    </div>
+    <div class="franjas-pills-row">
+      ${FRANJAS_HORARIAS.map(f => `
+        <button type="button" class="franja-pill ${activeFranjas.has(f.id) ? 'active' : ''}" data-fid="${f.id}">
+          <span>${f.label}</span>
+          <small>${f.sub}</small>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  row.querySelector('.slot-date-inp').addEventListener('change', triggerSave);
+  row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
+  row.querySelectorAll('.franja-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      triggerSave();
+    });
+  });
+
+  list.appendChild(row);
+}
+
+function addRestriccionRow(card, data = null) {
+  const list = card.querySelector('.restricciones-list');
+  if (!list) return;
+  const row = div('restriccion-row');
+  const motivo = (data && data.motivo) || 'clase';
+  const fecha  = (data && data.fecha)  || '';
+  const desde  = (data && data.desde)  || '16:00';
+  const hasta  = (data && data.hasta)  || '20:00';
+  const meUno  = data && data.meUnoAlSalir !== undefined ? !!data.meUnoAlSalir : true;
+
+  row.innerHTML = `
+    <div class="rest-grid">
+      <select class="rest-motivo">
+        ${MOTIVOS_RESTRICCION.map(m => `<option value="${m.id}" ${m.id === motivo ? 'selected' : ''}>${m.label}</option>`).join('')}
+      </select>
+      <input type="date" class="rest-fecha" value="${esc(fecha)}" title="Fecha afectada (vacío = aplica a todos los días propuestos)">
+      <div class="rest-time-pair">
+        <input type="time" class="rest-desde" value="${esc(desde)}">
+        <span>→</span>
+        <input type="time" class="rest-hasta" value="${esc(hasta)}">
+      </div>
+      <button type="button" class="btn-remove" title="Eliminar restricción">✕</button>
+    </div>
+    <div class="rest-sub-opts">
+      <label class="toggle-label" style="font-size:0.78rem;color:var(--muted)">
+        <input type="checkbox" class="rest-join-after" ${meUno ? 'checked' : ''}>
+        <span class="toggle-pill" style="transform:scale(0.8)"></span>
+        <span>⚡ Puedo incorporarme al plan en cuanto salga de esta obligación</span>
+      </label>
+      <span style="font-size:0.73rem;color:var(--muted)">* Si dejas la fecha vacía, el bloqueo se aplica a cualquier día.</span>
+    </div>
+  `;
+
+  row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
+  row.querySelectorAll('select, input').forEach(el => el.addEventListener('change', triggerSave));
+  list.appendChild(row);
+}
