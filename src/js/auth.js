@@ -21,10 +21,13 @@ async function handleLogin() {
   const pin    = $('login-pin').value.trim();
   const eid    = normEid($('login-eid').value.trim());
   const btn    = $('btn-login');
+  const recordar = $('login-recordar') ? $('login-recordar').checked : true;
 
   $('login-error').style.display = 'none';
   if (!nombre)        { showLoginErr('Escribe tu nombre'); return; }
-  if (pin.length < 4) { showLoginErr('El PIN debe tener al menos 4 dígitos'); return; }
+  // El PIN admite dígitos y letras (mín. 4); la fuerza bruta se frena en el
+  // servidor (límite de intentos + bcrypt), no con reglas client-side.
+  if (pin.length < 4) { showLoginErr('El PIN debe tener al menos 4 caracteres'); return; }
   if (!eid)           { showLoginErr('Introduce el ID de la encuesta'); return; }
 
   btn.textContent = 'Cargando…'; btn.disabled = true;
@@ -32,7 +35,9 @@ async function handleLogin() {
     const pinHash = await sha256(pin + '|' + eid);
     const res     = await api({ action: 'entrar', eid, nombre, pinHash });
     user = { nombre: res.nombre, pinHash, eid }; // nombre canónico (el servidor ignora mayúsculas)
-    try { localStorage.setItem(LS_USER, JSON.stringify(user)); } catch (e) {}
+    // La credencial persiste SOLO cifrada con un secreto aleatorio de sesión
+    // (nunca en claro). Con "recordar" desmarcado no se escribe nada en disco.
+    await beginSession(res.nombre, eid, pinHash, { persist: recordar });
     lastRaw = JSON.stringify(res.datos);
     applyData(res.datos);
     enterSurvey();
@@ -40,34 +45,43 @@ async function handleLogin() {
     console.warn('Login:', e);
     showLoginErr(e.message);
     btn.textContent = 'Entrar →'; btn.disabled = false;
+  } finally {
+    $('login-pin').value = '';   // el PIN no permanece en el DOM
   }
 }
 
 function tryRestoreSession() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(LS_USER) || 'null');
-    if (!(saved && saved.nombre && saved.pinHash && saved.eid)) return;
-    // Un enlace con ?e=<otra encuesta> manda sobre la sesión guardada
-    const deLink = eidDeLaUrl();
-    if (deLink && deLink !== saved.eid) return;
-    $('login-nombre').value = saved.nombre;
-    $('login-eid').value    = saved.eid;
+  // En localStorage solo hay: nombre, eid, token y el pinHash CIFRADO con un
+  // secreto aleatorio de esta instalación (inutilizable sin él, y el secreto
+  // va sellado bajo el token). Otro dispositivo no tiene nada de esto: allí
+  // siempre se pide el PIN.
+  const saved = getSavedSession();
+  if (!saved) return;
+  // Un enlace con ?e=<otra encuesta> manda sobre la sesión guardada
+  const deLink = eidDeLaUrl();
+  if (deLink && deLink !== saved.eid) return;
+
+  $('login-nombre').value = saved.nombre;
+  $('login-eid').value    = saved.eid;
+
+  getSessionPinHash(saved.eid, saved.nombre).then(async pinHash => {
+    if (!pinHash) return;                       // sin credencial: login manual
     const btn = $('btn-login');
     btn.textContent = 'Cargando…'; btn.disabled = true;
-    api({ action: 'entrar', eid: saved.eid, nombre: saved.nombre, pinHash: saved.pinHash })
-      .then(res => {
-        user = { ...saved, nombre: res.nombre };
-        lastRaw = JSON.stringify(res.datos);
-        applyData(res.datos);
-        enterSurvey();
-      })
-      .catch(e => {
-        user = null;
-        try { localStorage.removeItem(LS_USER); } catch (_) {}
-        showLoginErr(e.message);
-        btn.textContent = 'Entrar →'; btn.disabled = false;
-      });
-  } catch (e) {}
+    try {
+      const datos = await api({ action: 'get_all', eid: saved.eid, nombre: saved.nombre, pinHash });
+      user = { nombre: saved.nombre, pinHash, eid: saved.eid };
+      lastRaw = JSON.stringify(datos);
+      applyData(datos);
+      enterSurvey();
+    } catch (e) {
+      console.warn('Restaurar sesión:', e);
+      user = null;
+      clearSession();
+      showLoginErr('Sesión caducada: vuelve a introducir tu PIN.');
+      btn.textContent = 'Entrar →'; btn.disabled = false;
+    }
+  });
 }
 
 function enterSurvey() {
@@ -85,8 +99,23 @@ function enterSurvey() {
 function logout() {
   stopPolling();
   clearTimeout(saveTimer);
-  try { localStorage.removeItem(LS_USER); } catch (e) {}
-  user = null; schema = []; proscontras = []; respondentes = []; ausencias = []; lastRaw = '';
+  clearSession();                       // revoca + borra el registro cifrado
+  try { localStorage.removeItem(LS_USER); } catch (e) {}  // clave legada v2
+  _resetUiToLogin('');
+  user = null;
+}
+
+// Cierre de sesión no voluntario (revocado en otra pestaña): el registro ya
+// fue revocado, solo hay que volver al login con un aviso.
+function forcedLogout(msg) {
+  stopPolling();
+  clearTimeout(saveTimer);
+  user = null;
+  _resetUiToLogin(msg);
+}
+
+function _resetUiToLogin(msg) {
+  schema = []; proscontras = []; respondentes = []; ausencias = []; lastRaw = '';
   resetAusencias();
   $('questions-container').innerHTML = '';
   $('ausencias-card').style.display  = 'none';
@@ -94,6 +123,7 @@ function logout() {
   $('login-screen').style.display    = 'flex';
   const btn = $('btn-login');
   btn.textContent = 'Entrar →'; btn.disabled = false;
+  if (msg) showLoginErr(msg);
 }
 
 function bindAuth() {

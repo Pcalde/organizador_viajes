@@ -1,5 +1,8 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
-let user            = null;  // { nombre, pinHash, eid }
+// `user.pinHash` vive SOLO en memoria (nunca en localStorage): si el hash
+// circulara por disco, cualquiera con acceso al navegador podría reenviarlo
+// y autenticarse sin conocer el PIN (el hash funciona como contraseña).
+let user            = null;  // { nombre, eid, pinHash? }
 let encuestaTitulo  = 'Cuestionario de viaje';
 let schema          = [];
 let proscontras     = [];
@@ -23,6 +26,10 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// Icono Font Awesome de uso general en toda la app (sustituye a emojis).
+const faIcon = (cls, extraStyle = '') =>
+  `<i class="fa-solid ${cls}" aria-hidden="true"${extraStyle ? ` style="${extraStyle}"` : ''}></i>`;
 
 function safeUrl(u) {
   u = String(u || '').trim();

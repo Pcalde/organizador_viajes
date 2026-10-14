@@ -28,7 +28,7 @@ async function createProposalFromConsensus(texto) {
   if (!user) return;
   if (typeof switchMode === 'function') switchMode('debate');
   try {
-    await api({
+    await apiAuth({
       action: 'add_debate',
       eid: user.eid,
       nombre: user.nombre,
@@ -293,7 +293,7 @@ function bindDebateEvents(container) {
     renderDebate();
 
     try {
-      await api({
+      await apiAuth({
         action: 'add_debate',
         eid: user.eid,
         nombre: user.nombre,
@@ -371,7 +371,7 @@ function bindDebateEvents(container) {
       if (!user) return;
       const id = parseInt(btn.dataset.id, 10);
       try {
-        await api({ action: 'vote_debate', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, id });
+        await apiAuth({ action: 'vote_debate', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, id });
         pollOnce();
       } catch (e) {
         showStatus('Error al votar: ' + e.message, 'err');
@@ -385,7 +385,7 @@ function bindDebateEvents(container) {
       const id = parseInt(btn.dataset.id, 10);
       const resuelto = btn.dataset.res === '1';
       try {
-        await api({ action: 'resolve_debate', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, id, resuelto });
+        await apiAuth({ action: 'resolve_debate', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, id, resuelto });
         pollOnce();
       } catch (e) {
         showStatus('Error al actualizar estado: ' + e.message, 'err');

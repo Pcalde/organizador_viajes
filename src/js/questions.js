@@ -72,7 +72,7 @@ function buildQuestionCard(q, idx) {
       newCfg.step = Number(editBox.querySelector('.inp-eq-step').value) || 1;
     }
     try {
-      await api({
+      await apiAuth({
         action: 'edit_pregunta',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: q.id, label: newLabel, config: newCfg,
@@ -92,7 +92,7 @@ function buildQuestionCard(q, idx) {
     if (!user) return;
     if (!confirm(`¿Seguro que quieres eliminar la pregunta «${q.label}» para todo el grupo?`)) return;
     try {
-      await api({
+      await apiAuth({
         action: 'delete_pregunta',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: q.id,

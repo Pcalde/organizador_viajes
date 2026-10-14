@@ -51,7 +51,8 @@ function bindCreateTripUI() {
       const plantilla = $('login-plantilla')?.value || 'vacia';
 
       if (!nombre) { showLoginErr('Introduce tu nombre.'); return; }
-      if (!/^\d{4,8}$/.test(pin)) { showLoginErr('El PIN debe tener entre 4 y 8 dígitos numéricos.'); return; }
+      // PIN: 4–8 caracteres, dígitos o letras (la fuerza bruta se corta en el servidor).
+      if (!/^[A-Za-z0-9]{4,8}$/.test(pin)) { showLoginErr('El PIN debe tener entre 4 y 8 caracteres (dígitos o letras).'); return; }
       if (!/^[a-z0-9-]{3,60}$/.test(eid)) { showLoginErr('El ID debe tener al menos 3 caracteres (solo minúsculas a-z, números y guiones).'); return; }
 
       btnCreate.disabled = true;
@@ -64,7 +65,9 @@ function bindCreateTripUI() {
         });
 
         user = { nombre: res.nombre, pinHash, eid };
-        try { localStorage.setItem(LS_USER, JSON.stringify(user)); } catch (e) {}
+        const recordar = $('login-recordar') ? $('login-recordar').checked : true;
+        await beginSession(res.nombre, eid, pinHash, { persist: recordar });
+        $('login-pin').value = '';
 
         applyData(res.datos);
         $('utag-nombre').textContent = user.nombre;

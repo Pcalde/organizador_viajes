@@ -26,6 +26,8 @@ function unwrap(data) {
 }
 
 async function api(body) {
+  // El pinHash puede venir en el cuerpo (flujo normal) o inyectarse en un
+  // reintento con credencial rotada por apiAuthenticated().
   const def = RPC[body.action];
   if (!def) throw new Error('Acción desconocida: ' + body.action);
 
@@ -48,9 +50,13 @@ async function api(body) {
   return unwrap(await res.json());
 }
 
-const apiPost = api;
-
-async function sha256(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+// Envoltura de todas las llamadas autenticadas: reintenta una vez con la
+// credencial de sesión si el servidor rechaza el pinHash en memoria.
+async function apiAuth(body) {
+  return apiAuthenticated(pin => {
+    const b = { ...body, pinHash: body.pinHash || pin };
+    return api(b);
+  });
 }
+
+const apiPost = apiAuth;

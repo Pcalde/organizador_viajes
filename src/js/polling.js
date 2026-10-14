@@ -35,11 +35,20 @@ async function pollOnce() {
   if (!pollActive || !user || polling) return;
   if (document.hidden) return;
 
+  // ¿Otra pestaña de este navegador cerró la sesión? → volver al login.
+  if (consumeRevokedElsewhere()) {
+    stopPolling();
+    try { localStorage.removeItem(LS_SESSION); } catch (e) {}   // ya revocada: no re-anunciar
+    sessionSecretB64 = null;
+    forcedLogout('Tu sesión se cerró desde otra pestaña de este navegador.');
+    return;
+  }
+
   polling = true;
   const dot = $('poll-dot');
   if (dot) dot.classList.add('syncing');
   try {
-    const data = await api({ action: 'all', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash });
+    const data = await apiAuth({ action: 'all', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash });
     if (!pollActive || !user) return;
     pollFails = 0;
     const raw = JSON.stringify(data);

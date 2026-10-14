@@ -47,7 +47,7 @@ function createOptionCrudControls(qid, optKey, isCasa = false, currentCasaObj = 
     }
 
     try {
-      await api({
+      await apiAuth({
         action: 'edit_opcion',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: qid, oldOptKey: optKey, nuevaOpcion,
@@ -66,7 +66,7 @@ function createOptionCrudControls(qid, optKey, isCasa = false, currentCasaObj = 
     if (!user) return;
     if (!confirm(`¿Eliminar la opción «${optKey}» de esta pregunta?`)) return;
     try {
-      await api({
+      await apiAuth({
         action: 'delete_opcion',
         eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
         questionId: qid, optKey,
