@@ -1,0 +1,121 @@
+// ── NAVEGACIÓN DE MODOS, CREACIÓN DE ENCUESTA Y ARRANQUE (js/main.js) ───────
+
+function switchMode(mode) {
+  activeMode = mode;
+
+  document.querySelectorAll('#mode-tabs .mode-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  const vSurvey    = $('view-survey');
+  const vConsensus = $('view-consensus');
+  const vDebate    = $('view-debate');
+
+  if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
+  if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
+  if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
+
+  if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
+  if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
+
+  if (pollActive) schedulePoll(currentPollBaseInterval());
+}
+
+function bindCreateTripUI() {
+  const tabJoin   = $('tab-login-join');
+  const tabCreate = $('tab-login-create');
+  const extraBox  = $('create-trip-fields');
+  const btnLogin  = $('btn-login');
+  const btnCreate = $('btn-create-trip');
+  if (!tabJoin || !tabCreate) return;
+
+  const setLoginMode = isCreate => {
+    tabJoin.classList.toggle('active', !isCreate);
+    tabCreate.classList.toggle('active', isCreate);
+    if (extraBox)  extraBox.style.display  = isCreate ? 'flex'  : 'none';
+    if (btnLogin)  btnLogin.style.display  = isCreate ? 'none'  : 'block';
+    if (btnCreate) btnCreate.style.display = isCreate ? 'block' : 'none';
+    const errEl = $('login-error');
+    if (errEl) errEl.style.display = 'none';
+  };
+
+  tabJoin.addEventListener('click',   () => setLoginMode(false));
+  tabCreate.addEventListener('click', () => setLoginMode(true));
+
+  if (btnCreate) {
+    btnCreate.addEventListener('click', async () => {
+      const nombre    = ($('login-nombre')?.value || '').trim();
+      const pin       = ($('login-pin')?.value || '').trim();
+      const eid       = ($('login-eid')?.value || '').trim().toLowerCase();
+      const titulo    = ($('login-titulo')?.value || '').trim() || 'Cuestionario de viaje';
+      const plantilla = $('login-plantilla')?.value || 'vacia';
+
+      if (!nombre) { showLoginErr('Introduce tu nombre.'); return; }
+      if (!/^\d{4,8}$/.test(pin)) { showLoginErr('El PIN debe tener entre 4 y 8 dígitos numéricos.'); return; }
+      if (!/^[a-z0-9-]{3,60}$/.test(eid)) { showLoginErr('El ID debe tener al menos 3 caracteres (solo minúsculas a-z, números y guiones).'); return; }
+
+      btnCreate.disabled = true;
+      btnCreate.textContent = 'Creando viaje…';
+      try {
+        const pinHash = await sha256(pin + '|' + eid);
+        const res = await api({
+          action: 'crear_encuesta',
+          eid, nombre, pinHash, plantilla, titulo,
+        });
+
+        user = { nombre: res.nombre, pinHash, eid };
+        try { localStorage.setItem(LS_USER, JSON.stringify(user)); } catch (e) {}
+
+        applyData(res.datos);
+        $('utag-nombre').textContent = user.nombre;
+        $('utag-eid').textContent    = '#' + user.eid;
+        $('login-screen').style.display  = 'none';
+        $('survey-screen').style.display = 'block';
+
+        renderAllQuestions();
+        if (typeof renderAusencias === 'function') renderAusencias();
+        if (typeof renderReformulario === 'function') renderReformulario();
+        if (typeof renderDebate === 'function') renderDebate();
+        startPolling();
+      } catch (e) {
+        showLoginErr(e.message);
+      } finally {
+        btnCreate.disabled = false;
+        btnCreate.textContent = 'Crear viaje y entrar →';
+      }
+    });
+  }
+}
+
+function bindNavigation() {
+  document.querySelectorAll('#mode-tabs .mode-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchMode(btn.dataset.mode));
+  });
+
+  const surveyScreen = $('survey-screen');
+  if (surveyScreen) {
+    const obs = new MutationObserver(() => {
+      if (surveyScreen.style.display !== 'none' && user) {
+        hydrateFromServerIfNoDraft();
+        if (typeof renderAusencias === 'function') renderAusencias();
+        if (typeof renderReformulario === 'function') renderReformulario();
+        if (typeof renderDebate === 'function') renderDebate();
+      }
+    });
+    obs.observe(surveyScreen, { attributes: true, attributeFilter: ['style'] });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindAuth();
+  bindCreateTripUI();
+  bindForms();
+  bindAusencias();
+  bindSubmit();
+  bindNavigation();
+  if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_KEY.startsWith('TU_CLAVE')) {
+    showLoginErr('Falta configurar js/config.js (SUPABASE_URL y SUPABASE_KEY).');
+    return;
+  }
+  tryRestoreSession();
+});

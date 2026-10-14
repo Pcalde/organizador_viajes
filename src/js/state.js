@@ -1,0 +1,106 @@
+// ── ESTADO ──────────────────────────────────────────────────────────────────
+let user            = null;  // { nombre, pinHash, eid }
+let encuestaTitulo  = 'Cuestionario de viaje';
+let schema          = [];
+let proscontras     = [];
+let respondentes    = [];
+let respuestas      = [];
+let ausencias       = [];
+let debate          = [];
+let serverHasV2     = true;  // Detecta si _snapshot devuelve el campo `respuestas`
+let activeMode      = 'survey';
+let draftDirty      = false;
+let weightByProb    = true;
+let lastRaw         = '';
+let saveTimer       = null;
+let statusTimer     = null;
+
+// ── UTILIDADES ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function safeUrl(u) {
+  u = String(u || '').trim();
+  if (!u) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+  try {
+    const x = new URL(u);
+    return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : '';
+  } catch (e) { return ''; }
+}
+
+function hoyLocal() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function showStatus(msg, kind = 'info', ms = 5000) {
+  const el = $('gas-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-' + kind;
+  el.style.display = 'block';
+  clearTimeout(statusTimer);
+  if (ms) statusTimer = setTimeout(() => { el.style.display = 'none'; }, ms);
+}
+
+function applyData(data) {
+  if (!data) return;
+  serverHasV2    = ('respuestas' in data);
+  encuestaTitulo = data.titulo       || 'Cuestionario de viaje';
+  schema         = data.schema       || [];
+  proscontras    = data.proscontras  || [];
+  respondentes   = data.respondentes || [];
+  respuestas     = data.respuestas   || [];
+  ausencias      = data.ausencias    || [];
+  debate         = data.debate       || [];
+
+  // Garantiza que el usuario actual figure siempre en `respondentes` para poder votarse en ausencias
+  if (user && user.nombre) {
+    const exists = respondentes.some(r => r.nombre.toLowerCase() === user.nombre.toLowerCase());
+    if (!exists) {
+      respondentes.push({ nombre: user.nombre, ha_respondido: false, prob_asistencia: 80 });
+    }
+  }
+
+  const h1Title = $('survey-main-title');
+  if (h1Title) h1Title.textContent = encuestaTitulo;
+
+  const cResp = $('count-resp');
+  if (cResp) cResp.textContent = respuestas.length || respondentes.filter(r => r.ha_respondido !== false).length;
+  const cDeb = $('count-debate');
+  if (cDeb) cDeb.textContent = debate.length + proscontras.length;
+
+  // Si estamos viendo Consenso o Debate, repintar inmediatamente
+  if (activeMode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
+  if (activeMode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
+}
+
+function extractAnswer(ansObj, q) {
+  if (!ansObj) return null;
+  if (ansObj.values && q.id in ansObj.values) {
+    return ansObj.values[q.id];
+  }
+  switch (q.id) {
+    case 'opciones-destino': return ansObj.opciones ?? null;
+    case 'casas':            return ansObj.casas ?? null;
+    case 'precio':           return ansObj.precioMaxPP ?? null;
+    case 'transporte':       return ansObj.transporte ?? null;
+    case 'disponibilidad':
+      if (!ansObj.disponibilidad && !ansObj.rangosFechas && !ansObj.diasMax) return null;
+      return {
+        diasMax: ansObj.diasMax ?? 5,
+        soloFinde: !!(ansObj.disponibilidad && ansObj.disponibilidad.soloFinde),
+        meDaIgual: !!(ansObj.disponibilidad && ansObj.disponibilidad.meDaIgual),
+        preferirPuente: !!(ansObj.disponibilidad && ansObj.disponibilidad.preferirPuente),
+        rangos: ansObj.rangosFechas || [],
+      };
+    default:
+      return (ansObj.extras && q.id in ansObj.extras) ? ansObj.extras[q.id] : null;
+  }
+}
