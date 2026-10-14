@@ -266,7 +266,11 @@ const TOGGLES_DISP = [
   ['preferirPuente', 'Mejor si hay puente / festivo'],
 ];
 
-const TIPOS = {
+// NOTA: `var` es intencional. Los <script> clásicos comparten el scope global,
+// pero las declaraciones `const/let` viven en un "script scope" separado y NO
+// son visibles desde otros archivos .js (dan ReferenceError: X is not defined).
+// `var` sí crea la propiedad en window, haciendo TIPOS accesible al resto.
+var TIPOS = {
 
   checkbox: {
     build(card, q) {
