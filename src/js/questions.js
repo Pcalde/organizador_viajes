@@ -40,7 +40,7 @@ function buildQuestionCard(q, idx) {
   header.append(title, actions);
   card.appendChild(header);
 
-  if (q.config && q.config.descripcion) {
+  if (q.tipo !== 'textarea' && q.config && q.config.descripcion) {
       const d = div('q-desc md-content'); 
       d.innerHTML = renderMarkdown(q.config.descripcion); 
       card.appendChild(d);
