@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cuestionador de viajes</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="src/css/styles.css">
@@ -29,7 +31,7 @@
         <input type="text" id="login-nombre" placeholder="Como quieres aparecer en el grupo" autocomplete="name" maxlength="40">
       </div>
       <div class="login-field">
-        <label for="login-pin">PIN <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4–8 dígitos o letras, solo tú lo sabes)</span></label>
+        <label for="login-pin">Contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4–8 dígitos o letras, solo tú lo sabes)</span></label>
         <input type="password" id="login-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="current-password">
       </div>
       <div class="login-field">
@@ -50,9 +52,10 @@
         <div class="login-field" style="margin-bottom:0">
           <label for="login-plantilla">Plantilla inicial de preguntas</label>
           <select id="login-plantilla">
-            <option value="vacia">✨ En blanco (0 preguntas, crear todo a medida)</option>
-            <option value="minima">⚡ Mínima (Disponibilidad + Presupuesto + Notas)</option>
-            <option value="completa">🧳 Completa de viaje (Plan, Casas, Precio, Transporte, Fechas, Notas)</option>
+            <option value="vacia"> En blanco (0 preguntas, crear todo a medida)</option>
+            <option value="minima"> Viaje mínimo (Disponibilidad + Presupuesto + Notas)</option>
+            <option value="completa"> Completa de viaje (Plan, Casas, Precio, Transporte, Fechas, Notas)</option>
+            <option value="quedada"> Quedada (plan, horarios por franjas, transporte, presupuesto)</option>
           </select>
         </div>
       </div>
@@ -112,6 +115,7 @@
             <option value="radio">Selección única (Radio)</option>
             <option value="casas">Listado de casas (Nombre + Precio + URL)</option>
             <option value="slider">Rango numérico (Slider)</option>
+            <option value="horarios">Horarios por franjas (quedadas)</option>
             <option value="disponibilidad">Calendario y fechas (Disponibilidad)</option>
             <option value="textarea">Texto libre</option>
           </select>
@@ -138,7 +142,17 @@
             <div><label>Paso</label><input type="number" id="aq-step" value="10"></div>
           </div>
         </div>
+        <div id="add-q-horarios-wrap" style="display:none" class="add-q-field">
+          <label>Duración ideal del plan (horas)</label>
+          <input type="number" id="aq-dur" value="3" min="1" max="12">
+          <label style="margin-top:10px">Franjas horarias del grupo</label>
+          <div id="aq-franjas-host"></div>
+        </div>
         <button class="btn-propose" type="button" id="btn-submit-new-q">Proponer al grupo →</button>
+        <div class="add-q-field">
+          <label>Descripción (opcional)</label>
+          <textarea id="add-q-desc" rows="2" maxlength="500" placeholder="Texto explicativo bajo el título…"></textarea>
+        </div>
       </div>
     </div>
 
@@ -184,7 +198,7 @@
 <script src="src/js/crypto.js"></script>
 <script src="src/js/api.js"></script>
 <script src="src/js/state.js"></script>
-<script src="src/js/session.js"></script>
+<script src="src/js/sesion.js"></script>
 <script src="src/js/types.js"></script>
 <script src="src/js/questions.js"></script>
 <script src="src/js/proscontras.js"></script>
