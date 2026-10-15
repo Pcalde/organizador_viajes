@@ -70,6 +70,20 @@ header h1 em { font-style: italic; color: var(--accent); }
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
 
+.participants-note { color: var(--muted); font-size: 0.86rem; margin: -8px 0 14px; }
+.participants-list { display: flex; flex-direction: column; }
+.participant-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.participant-name { flex: 1; font-size: 0.9rem; overflow-wrap: anywhere; }
+.participant-you { color: var(--muted); font-size: 0.78rem; }
+.participant-vote { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; white-space: nowrap; }
+.participant-vote.is-voter { color: var(--accent2); }
+.participant-vote.not-voter { color: var(--muted); }
+.participant-delete { border: 0; background: transparent; color: var(--muted); padding: 7px; cursor: pointer; }
+.participant-delete:hover { color: var(--accent); }
+.participant-delete:disabled { opacity: 0.45; cursor: wait; }
+.participants-empty { color: var(--muted); font-size: 0.88rem; }
+@media (max-width: 480px) { .participant-row { gap: 8px; } .participant-vote { font-size: 0.72rem; } }
+
 .card-title {
   font-family: 'Fraunces', serif; font-size: 1.15rem; font-weight: 300;
   margin-bottom: 18px; display: flex; align-items: center; gap: 10px;
