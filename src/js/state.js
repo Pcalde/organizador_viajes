@@ -92,7 +92,7 @@ function applyData(data) {
   if (activeMode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
 }
 
-function extractAnswer(ansObj, q) {
+function _extractRaw(ansObj, q) {
   if (!ansObj) return null;
   if (ansObj.values && q.id in ansObj.values) {
     return ansObj.values[q.id];
@@ -114,4 +114,8 @@ function extractAnswer(ansObj, q) {
     default:
       return (ansObj.extras && q.id in ansObj.extras) ? ansObj.extras[q.id] : null;
   }
+}
+function extractAnswer(ansObj, q) {
+  const v = _extractRaw(ansObj, q);
+  return q.tipo === 'voto-ponderado' ? normPond(v) : v;
 }

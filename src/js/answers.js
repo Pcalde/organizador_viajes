@@ -125,8 +125,10 @@ function validarRespuestas() {
     }
     if (q.tipo === 'horarios') {
       const st = TIPOS.horarios.read(card, q);
-      const restMala = (st.restricciones || []).find(r => r.desde && r.hasta && r.hasta <= r.desde);
-      if (restMala) return `Restricción horaria inválida (${restMala.desde} → ${restMala.hasta}): la hora de fin debe ser posterior a la de inicio.`;
+      const mala = (st.restricciones || []).find(r => r.desde === r.hasta);
+      if (mala) return `Restricción horaria inválida (${mala.desde}): inicio y fin no pueden coincidir.`;
+      const fMala = (st.restricciones || []).find(r => r.fechaDesde && r.fechaHasta && r.fechaHasta < r.fechaDesde);
+      if (fMala) return `Restricción con fechas inválidas (${fMala.fechaDesde} → ${fMala.fechaHasta}).`;
     }
   }
   return null;

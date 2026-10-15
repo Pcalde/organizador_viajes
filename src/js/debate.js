@@ -220,6 +220,7 @@ function renderThreadsList(listEl, hilos) {
           <span class="pc-tipo ${e.tipo}">${e.tipo === 'pro' ? '✓ PRO' : '✗ CONTRA'}</span>
           <span class="voter-chip">${esc(e.optKey)}</span>
           <span class="pc-texto">${esc(e.texto)}</span>
+          <span class="pc-cred ${pcEstado(pcCred(e).p)}">${Math.round(pcCred(e).p * 100)}%</span>
           <span class="pc-autor">— ${esc(e.autor)}</span>
         </div>
       `).join('')}

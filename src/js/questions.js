@@ -17,6 +17,7 @@ function buildQuestionCard(q, idx) {
   card.className = 'card';
   card.dataset.qid = q.id;
   card.state = {};
+  card.dataset.cfg = JSON.stringify(q.config || {});
 
   const header = div('card-title-row');
   const title  = div('card-title');
@@ -29,9 +30,21 @@ function buildQuestionCard(q, idx) {
   const btnDel  = document.createElement('button');
   btnDel.type  = 'button'; btnDel.className  = 'btn-icon-subtle danger'; btnDel.title = 'Eliminar pregunta'; btnDel.textContent = '🗑';
 
-  actions.append(btnEdit, btnDel);
+  const mkMove = (txt, title, dir) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'btn-icon-subtle'; b.title = title; b.textContent = txt;
+  b.addEventListener('click', () => moverPregunta(q.id, dir));
+  return b;
+  };
+  actions.append(mkMove('▲', 'Subir', -1), mkMove('▼', 'Bajar', 1), btnEdit, btnDel);
   header.append(title, actions);
   card.appendChild(header);
+
+  if (q.config && q.config.descripcion) {
+      const d = div('q-desc md-content'); 
+      d.innerHTML = renderMarkdown(q.config.descripcion); 
+      card.appendChild(d);
+  }
 
   // Panel inline para editar título / configuración de la pregunta
   const editBox = div('q-edit-inline');
@@ -48,6 +61,21 @@ function buildQuestionCard(q, idx) {
           <div><label>Paso</label><input type="number" class="inp-eq-step" value="${cfg.step ?? 10}"></div>
         </div>
       ` : ''}
+
+      ${q.tipo === 'textarea' ? `
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <label style="font-size:0.78rem;color:var(--muted)">Límite de caracteres:</label>
+          <input type="number" class="inp-eq-maxlen" value="${cfg.maxlength ?? 500}" min="50" max="2000" style="width:80px">
+        </div>
+      ` : ''}
+      ${q.tipo === 'horarios' ? `
+        <label style="font-size:0.78rem;color:var(--muted)">Duración ideal del plan (h)</label>
+        <input type="number" class="inp-eq-dur" value="${cfg.duracionIdeal ?? 3}" min="1" max="12">
+        <label style="font-size:0.78rem;color:var(--muted)">Franjas horarias (afectan a todo el grupo)</label>
+        <div class="eq-franjas-host"></div>
+      ` : ''}
+      <label style="font-size:0.78rem;color:var(--muted)">Descripción / texto explicativo (opcional)</label>
+      <textarea class="inp-edit-q-desc" rows="2" maxlength="500">${esc(cfg.descripcion || '')}</textarea>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" class="btn-pc btn-cancel-eq">Cancelar</button>
         <button type="button" class="btn-propose btn-save-eq" style="padding:6px 14px;font-size:0.8rem">Guardar cambios</button>
@@ -55,6 +83,8 @@ function buildQuestionCard(q, idx) {
     </div>
   `;
   card.appendChild(editBox);
+  let getFr = null;
+  if (q.tipo === 'horarios') getFr = buildFranjasEditor(editBox.querySelector('.eq-franjas-host'), getFranjas(q));
 
   btnEdit.addEventListener('click', () => {
     editBox.style.display = editBox.style.display === 'none' ? 'flex' : 'none';
@@ -71,6 +101,16 @@ function buildQuestionCard(q, idx) {
       newCfg.max  = Number(editBox.querySelector('.inp-eq-max').value);
       newCfg.step = Number(editBox.querySelector('.inp-eq-step').value) || 1;
     }
+    if (q.tipo === 'horarios') {
+      newCfg.franjas = getFr();
+      if (!newCfg.franjas.length) { showStatus('Define al menos una franja válida', 'err'); return; }
+      newCfg.duracionIdeal = Math.max(1, Math.min(12, Number(editBox.querySelector('.inp-eq-dur').value) || 3));
+    }
+    if (q.tipo === 'textarea') {
+      const rawMax = Number(editBox.querySelector('.inp-eq-maxlen').value);
+      newCfg.maxlength = Math.max(50, Math.min(2000, isNaN(rawMax) ? 500 : rawMax));
+    }
+    newCfg.descripcion = editBox.querySelector('.inp-edit-q-desc').value.trim();
     try {
       await apiAuth({
         action: 'edit_pregunta',
@@ -123,6 +163,10 @@ function buildQuestionCard(q, idx) {
       });
       schema = schema.filter(x => x.id !== q.id);
       card.remove();
+      const domOrder = [...container.querySelectorAll(':scope > .card')].map(c => c.dataset.qid).join();
+      if (domOrder !== schema.map(q => q.id).join()) {
+        schema.forEach(q => { const c = cardFor(q.id); if (c) container.appendChild(c); });
+      }
       renumberCards();
       showStatus('Pregunta eliminada', 'ok', 2500);
       pollOnce();
@@ -196,10 +240,26 @@ function syncSchemaToDOM() {
       if (nueva) container.appendChild(nueva);
       return;
     }
+      if (q.tipo === 'horarios' && card.dataset.cfg !== JSON.stringify(q.config || {})) {
+      const prev  = TIPOS.horarios.read(card, q);
+      const nueva = buildQuestionCard(q, idx);
+      if (nueva) { card.replaceWith(nueva); TIPOS.horarios.write(nueva, q, prev); }
+      return;
+    }
 
     // Actualizar título si cambió
     const lblEl = card.querySelector('.q-label-text');
     if (lblEl && lblEl.textContent !== q.label) lblEl.textContent = q.label;
+
+    const desc = (q.config && q.config.descripcion) || '';
+    let de = card.querySelector(':scope > .q-desc');
+    if (desc) {
+        if (!de) { 
+            de = div('q-desc md-content'); 
+            card.querySelector('.card-title-row').after(de); 
+        }
+        de.innerHTML = renderMarkdown(desc);
+    } else if (de) de.remove();
 
     const type = TIPOS[q.tipo];
     if (!type || !type.addOption) return;
@@ -217,4 +277,27 @@ function syncSchemaToDOM() {
   });
 
   renumberCards();
+}
+function moveCardDom(qid, dir) {
+  const c = cardFor(qid);
+  if (!c) return;
+  if (dir < 0 && c.previousElementSibling) c.parentNode.insertBefore(c, c.previousElementSibling);
+  if (dir > 0 && c.nextElementSibling)     c.nextElementSibling.after(c);
+  renumberCards();
+}
+
+async function moverPregunta(qid, dir) {
+  const i = schema.findIndex(x => x.id === qid), j = i + dir;
+  if (!user || i < 0 || j < 0 || j >= schema.length) return;
+  [schema[i], schema[j]] = [schema[j], schema[i]];
+  moveCardDom(qid, dir);
+  try {
+    await apiAuth({ action: 'reordenar_preguntas', eid: user.eid, nombre: user.nombre,
+                    pinHash: user.pinHash, ids: schema.map(x => x.id) });
+    pollOnce();
+  } catch (e) {
+    [schema[i], schema[j]] = [schema[j], schema[i]];
+    moveCardDom(qid, -dir);
+    showStatus('No se pudo reordenar: ' + e.message, 'err');
+  }
 }

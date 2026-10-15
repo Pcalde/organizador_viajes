@@ -18,6 +18,10 @@ const RPC = {
   add_debate:      { fn: 'add_debate',      args: b => ({ ...ident(b), p_tipo: b.tipo, p_texto: b.texto, p_qid: b.qid || null, p_optkey: b.optKey || null, p_parent: b.parentId || null }) },
   vote_debate:     { fn: 'vote_debate',     args: b => ({ ...ident(b), p_id: b.id }) },
   resolve_debate:  { fn: 'resolve_debate',  args: b => ({ ...ident(b), p_id: b.id, p_resuelto: b.resuelto }) },
+  edit_proscontra:   { fn: 'edit_proscontra',   args: b => ({ ...ident(b), p_id: b.id, p_texto: b.texto }) },
+  delete_proscontra: { fn: 'delete_proscontra', args: b => ({ ...ident(b), p_id: b.id }) },
+  vote_proscontra:   { fn: 'vote_proscontra',   args: b => ({ ...ident(b), p_id: b.id, p_voto: b.voto }) },
+  reordenar_preguntas: { fn: 'reordenar_preguntas', args: b => ({ ...ident(b), p_ids: b.ids }) },
 };
 
 function unwrap(data) {

@@ -1,5 +1,5 @@
 // ── FORMULARIOS DE PROPUESTA ────────────────────────────────────────────────
-
+var aqGetFranjas = null;
 function createAddOptForm(q) {
   const wrap    = div('add-opt-form');
   const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'add-opt-trigger'; trigger.textContent = '+ Proponer opción';
@@ -21,9 +21,10 @@ function createAddCasaForm(q) {
   const wrap    = div('add-opt-form');
   const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'add-opt-trigger'; trigger.textContent = '+ Proponer casa';
   const fields  = div('add-opt-fields');
+  const mk = ph => { const i = document.createElement('input'); i.type = 'text'; i.placeholder = ph; return i; };
+  const inFoto   = mk('URL de foto (opcional, enlace directo a la imagen)');
   trigger.addEventListener('click', () => fields.classList.toggle('open'));
 
-  const mk = ph => { const i = document.createElement('input'); i.type = 'text'; i.placeholder = ph; return i; };
   const inNombre = mk('Nombre o descripción *');
   const inPrecio = mk('Precio (p.ej. 280€)');
   const inUrl    = mk('URL (opcional)');
@@ -31,14 +32,15 @@ function createAddCasaForm(q) {
   btn.addEventListener('click', () => {
     const nombre = inNombre.value.trim();
     if (!nombre) { inNombre.focus(); return; }
-    const rawUrl = inUrl.value.trim();
-    const url    = safeUrl(rawUrl);
+    const rawUrl = inUrl.value.trim(), url = safeUrl(rawUrl);
     if (rawUrl && !url) { showStatus('La URL debe ser http(s) válida', 'err'); inUrl.focus(); return; }
-    submitNewCasa(q, { nombre, precio: inPrecio.value.trim(), url });
-    inNombre.value = ''; inPrecio.value = ''; inUrl.value = '';
+    const rawFoto = inFoto.value.trim(), foto = safeUrl(rawFoto);
+    if (rawFoto && !foto) { showStatus('La URL de la foto debe ser http(s) válida', 'err'); inFoto.focus(); return; }
+    submitNewCasa(q, { nombre, precio: inPrecio.value.trim(), url, foto });
+    inNombre.value = inPrecio.value = inUrl.value = inFoto.value = '';
     fields.classList.remove('open');
   });
-  fields.append(inNombre, inPrecio, inUrl, btn);
+  fields.append(inNombre, inPrecio, inUrl, inFoto, btn);
   wrap.append(trigger, fields);
   return wrap;
 }
@@ -108,6 +110,9 @@ function resetAddQuestionForm() {
   const cont = $('add-q-opts-container');
   cont.innerHTML = '<div class="add-q-opt-row"><input type="text" placeholder="Opción 1"><button class="btn-remove" type="button">✕</button></div>';
   $('add-q-tipo').dispatchEvent(new Event('change')); // reajusta placeholder
+  aqGetFranjas = buildFranjasEditor($('aq-franjas-host'), FRANJAS_HORARIAS);
+  $('aq-dur').value = 3;
+  $('add-q-desc').value = '';
 }
 
 async function submitNewQuestion() {
@@ -131,14 +136,19 @@ async function submitNewQuestion() {
     };
     if (config.max <= config.min) { showStatus('El máximo debe ser mayor que el mínimo', 'err'); return; }
     config.default = Math.round((config.min + config.max) / 2);
+    } else if (tipo === 'horarios') {
+    const franjas = aqGetFranjas();
+    if (!franjas.length) { showStatus('Define al menos una franja válida', 'err'); return; }
+    config = { duracionIdeal: Math.max(1, Math.min(12, +$('aq-dur').value || 3)), franjas };
   } else if (tipo === 'casas') {
-    opciones = textos.map(nombre => ({ nombre, precio: '', url: '' }));
+    opciones = textos.map(nombre => ({ nombre, precio: '', url: '', foto: '' }));
   } else if (tipo === 'radio') {
     opciones = textos.map(t => t.replace(/\|/g, '/'));
-  } else if (tipo !== 'textarea' && tipo !== 'disponibilidad') {
+  } else if (tipo !== 'textarea' && tipo !== 'disponibilidad' && tipo !== 'horarios') {
     opciones = textos;
   }
-
+  const desc = $('add-q-desc').value.trim();
+  if (desc) config.descripcion = desc;
   const pregunta = { id, tipo, label, opciones, config };
 
   // Optimista, con rollback
@@ -166,11 +176,11 @@ function bindForms() {
     const v = this.value;
     $('add-q-opciones-wrap').style.display = ['checkbox', 'radio', 'voto-ponderado', 'casas'].includes(v) ? 'block' : 'none';
     $('add-q-slider-wrap').style.display   = v === 'slider' ? 'block' : 'none';
-    const sinOpciones = ['slider', 'disponibilidad', 'horarios', 'textarea'].includes(tipo);
-    $('add-q-opciones-wrap').style.display = sinOpciones ? 'none' : 'block';
+    $('add-q-horarios-wrap').style.display = v === 'horarios' ? 'block' : 'none';
     const first = document.querySelector('#add-q-opts-container input');
     if (first) first.placeholder = v === 'casas' ? 'Nombre de la casa (el precio se añade luego)' : 'Opción 1';
   });
+  aqGetFranjas = buildFranjasEditor($('aq-franjas-host'), FRANJAS_HORARIAS);
 
   $('btn-add-q-opt').addEventListener('click', () => {
     const cont = $('add-q-opts-container');

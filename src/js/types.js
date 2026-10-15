@@ -65,6 +65,10 @@ function createOptionCrudControls(item, q, rawOp) {
             <label>Enlace (URL)</label>
             <input type="text" class="inp-eo-url" value="${esc(rawOp.url || '')}" placeholder="https://...">
           </div>
+          <div class="opt-edit-field" style="flex:2;min-width:180px">
+            <label>Foto (URL de imagen)</label>
+            <input type="text" class="inp-eo-foto" value="${esc(rawOp.foto || '')}" placeholder="https://…/foto.jpg">
+          </div>
         </div>
         <div class="opt-edit-actions">
           <button type="button" class="btn-pc btn-eo-cancel">Cancelar</button>
@@ -72,23 +76,6 @@ function createOptionCrudControls(item, q, rawOp) {
         </div>
       `;
     } else {
-      const nuevoTexto = prompt('Editar texto de la opción:', optKey);
-      if (!nuevoTexto || !nuevoTexto.trim() || nuevoTexto.trim() === optKey) return;
-      nuevaOpcion = nuevoTexto.trim();
-    }
-
-    try {
-      await apiAuth({
-        action: 'edit_opcion',
-        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
-        questionId: qid, oldOptKey: optKey, nuevaOpcion,
-      });
-      await pollOnce();
-      renderAllQuestions();
-      restoreDraft();
-      showStatus('Opción actualizada', 'ok', 2000);
-    } catch (err) {
-      showStatus('No se pudo editar la opción: ' + err.message, 'err');
       drawer.innerHTML = `
         <div class="opt-edit-single">
           <input type="text" class="inp-eo-text" value="${esc(curLabel)}" placeholder="Texto de la opción…">
@@ -113,8 +100,9 @@ function createOptionCrudControls(item, q, rawOp) {
         const nombre = drawer.querySelector('.inp-eo-nombre').value.trim();
         const precio = drawer.querySelector('.inp-eo-precio').value.trim();
         const url    = safeUrl(drawer.querySelector('.inp-eo-url').value);
+        const foto   = safeUrl(drawer.querySelector('.inp-eo-foto').value);
         if (!nombre) { drawer.querySelector('.inp-eo-nombre').focus(); return; }
-        nuevaOpcion = { nombre, precio, url };
+        nuevaOpcion = { nombre, precio, url, foto };
         newKey = nombre;
       } else {
         const txt = drawer.querySelector('.inp-eo-text').value.trim();
@@ -334,9 +322,17 @@ function createCasaItem(q, op, n) {
 
   const precio = document.createElement('span');
   precio.className = 'casa-precio'; precio.textContent = op.precio || '';
-
+  const foto = safeUrl(op.foto);
+  let thumb = null;
+  if (foto) {
+    thumb = document.createElement('img');
+    thumb.className = 'casa-foto'; thumb.src = foto; thumb.alt = op.nombre;
+    thumb.loading = 'lazy'; thumb.referrerPolicy = 'no-referrer';
+    thumb.addEventListener('error', () => thumb.remove());
+    thumb.addEventListener('click', () => window.open(foto, '_blank', 'noopener'));
+  }
   const crud = createOptionCrudControls(item, qObj, op);
-  row.append(anchor, lbl, precio, crud.buttons);
+  row.append(anchor, ...(thumb ? [thumb] : []), lbl, precio, crud.buttons);
 
   const [badge, panel] = pcParts();
   item.append(row, crud.drawer, badge, panel);
@@ -430,6 +426,7 @@ function addDateRange(card, desde = null, hasta = null) {
 }
 
 const TOGGLES_DISP = [
+  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
   ['soloFinde',      'Solo puedo fines de semana'],
   ['meDaIgual',      'Me da igual entre semana o fin de semana'],
   ['preferirPuente', 'Mejor si hay puente / festivo'],
@@ -484,7 +481,7 @@ var TIPOS = {
     },
     write(card, q, dict) {
       card.querySelectorAll('.btn-pond.active').forEach(b => b.classList.remove('active'));
-      Object.entries(dict || {}).forEach(([val, score]) => {
+      Object.entries(normPond(dict) || {}).forEach(([val, score]) => {
         const item = findItem(card, val);
         const b = item && item.querySelector(`.btn-pond[data-score="${score}"]`);
         if (b) b.classList.add('active');
@@ -529,81 +526,74 @@ var TIPOS = {
   },
 
   // ── horarios (Planificación por franjas + Restricciones de clase/trabajo/examen) ──
-  horarios: {
-    build(card, q) {
-      const cfg = q.config || {};
-      card.state.duracion = createStepper(1, 12, cfg.duracionIdeal ?? 3, triggerSave);
+    horarios: {
+      build(card, q) {
+        const cfg = q.config || {};
+        card.state.franjas  = getFranjas(q);
+        card.state.duracion = createStepper(1, 12, cfg.duracionIdeal ?? 3, triggerSave);
 
-      const wrap = div('horarios-builder');
-      wrap.innerHTML = `
-        <div class="hor-section">
-          <div class="hor-sec-head">
-            <div>
-              <div style="font-size:0.88rem;font-weight:600">1. ¿Qué días y en qué franjas estás libre?</div>
-              <div style="font-size:0.78rem;color:var(--muted)">Marca las franjas posibles para cada fecha candidata (puedes pulsar varias por día).</div>
-            </div>
+        const wrap = div('horarios-builder');
+        wrap.innerHTML = `
+          <div class="hor-section">
+            <div style="font-size:0.88rem;font-weight:600">1. ¿Qué días (o intervalos de días) y franjas puedes?</div>
+            <div style="font-size:0.78rem;color:var(--muted)">Cada bloque es un intervalo de fechas (puede ser un solo día) con las franjas en las que estás libre.</div>
+            <div class="day-slots-list"></div>
+            <button type="button" class="btn-add btn-add-slot" style="margin-top:8px">+ Añadir intervalo de días y franjas</button>
           </div>
-          <div class="day-slots-list"></div>
-          <button type="button" class="btn-add btn-add-slot" style="margin-top:8px">+ Añadir fecha y franjas disponibles</button>
-        </div>
 
-        <div class="hor-section" style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--border)">
-          <div class="hor-sec-head">
-            <div>
-              <div style="font-size:0.88rem;font-weight:600">2. Restricciones horarias (Clases, Trabajo, Exámenes…)</div>
-              <div style="font-size:0.78rem;color:var(--muted)">Indica las horas exactas en las que estás ocupado para que el optimizador calcule si cuadramos antes, después o si te unes al salir.</div>
-            </div>
+          <div class="hor-section" style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--border)">
+            <div style="font-size:0.88rem;font-weight:600">2. Restricciones horarias (clases, trabajo, exámenes…)</div>
+            <div style="font-size:0.78rem;color:var(--muted)">Indica cuándo estás ocupado (en un intervalo de fechas o todos los días) para calcular si cuadramos o te unes al salir.</div>
+            <div class="restricciones-list"></div>
+            <button type="button" class="btn-add btn-add-rest" style="margin-top:8px">+ Añadir restricción horaria</button>
           </div>
-          <div class="restricciones-list"></div>
-          <button type="button" class="btn-add btn-add-rest" style="margin-top:8px">+ Añadir restricción horaria (clase, turno, examen…)</button>
-        </div>
 
-        <div class="dias-row" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
-          <span style="font-size:0.88rem;color:var(--muted)">Duración estimada que te apetece para el plan (horas):</span>
-          <div class="dur-stepper-slot"></div>
-        </div>
-      `;
+          <div class="dias-row" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+            <span style="font-size:0.88rem;color:var(--muted)">Duración que te apetece para el plan (horas):</span>
+            <div class="dur-stepper-slot"></div>
+          </div>`;
 
-      wrap.querySelector('.dur-stepper-slot').appendChild(card.state.duracion.el);
-      wrap.querySelector('.btn-add-slot').addEventListener('click', () => { addDaySlotRow(card); triggerSave(); });
-      wrap.querySelector('.btn-add-rest').addEventListener('click', () => { addRestriccionRow(card); triggerSave(); });
+        wrap.querySelector('.dur-stepper-slot').appendChild(card.state.duracion.el);
+        wrap.querySelector('.btn-add-slot').addEventListener('click', () => { addDaySlotRow(card); triggerSave(); });
+        wrap.querySelector('.btn-add-rest').addEventListener('click', () => { addRestriccionRow(card); triggerSave(); });
+        card.appendChild(wrap);
+        addDaySlotRow(card);
+      },
+      read(card) {
+        const disponibilidades = [...card.querySelectorAll('.day-slot-row')].map(r => {
+          const desde = r.querySelector('.slot-from').value || null;
+          const hasta = r.querySelector('.slot-to').value || desde;
+          return { desde, hasta, franjas: [...r.querySelectorAll('.franja-pill.active')].map(b => b.dataset.fid) };
+        }).filter(d => d.desde && d.franjas.length);
 
-      card.appendChild(wrap);
-      addDaySlotRow(card);
+        const restricciones = [...card.querySelectorAll('.restriccion-row')].map(r => {
+          const fd = r.querySelector('.rest-fd').value || null;
+          return {
+            motivo: r.querySelector('.rest-motivo').value,
+            fechaDesde: fd,
+            fechaHasta: r.querySelector('.rest-fh').value || fd,
+            desde: r.querySelector('.rest-desde').value || null,
+            hasta: r.querySelector('.rest-hasta').value || null,
+            meUnoAlSalir: r.querySelector('.rest-join-after').checked,
+          };
+        }).filter(r => r.desde && r.hasta);
+
+        return { disponibilidades, restricciones, duracionHoras: card.state.duracion.get() };
+      },
+      write(card, q, v) {
+        if (!v) return;
+        if (v.duracionHoras && card.state.duracion) card.state.duracion.set(v.duracionHoras);
+        if (Array.isArray(v.disponibilidades)) {
+          card.querySelector('.day-slots-list').innerHTML = '';
+          if (v.disponibilidades.length) v.disponibilidades.forEach(d => addDaySlotRow(card, d));
+          else addDaySlotRow(card);
+        }
+        if (Array.isArray(v.restricciones)) {
+          card.querySelector('.restricciones-list').innerHTML = '';
+          v.restricciones.forEach(r => addRestriccionRow(card, r));
+        }
+      },
     },
-    read(card) {
-      const disponibilidades = [...card.querySelectorAll('.day-slot-row')].map(r => ({
-        fecha: r.querySelector('.slot-date-inp').value || null,
-        franjas: [...r.querySelectorAll('.franja-pill.active')].map(b => b.dataset.fid),
-      })).filter(d => d.fecha && d.franjas.length > 0);
-
-      const restricciones = [...card.querySelectorAll('.restriccion-row')].map(r => ({
-        motivo: r.querySelector('.rest-motivo').value,
-        fecha:  r.querySelector('.rest-fecha').value || null,
-        desde:  r.querySelector('.rest-desde').value || null,
-        hasta:  r.querySelector('.rest-hasta').value || null,
-        meUnoAlSalir: r.querySelector('.rest-join-after').checked,
-      })).filter(r => r.desde && r.hasta);
-
-      return {
-        disponibilidades,
-        restricciones,
-        duracionHoras: card.state.duracion.get(),
-      };
-    },
-    write(card, q, v) {
-      if (!v) return;
-      if (v.duracionHoras && card.state.duracion) card.state.duracion.set(v.duracionHoras);
-      if (Array.isArray(v.disponibilidades) && v.disponibilidades.length) {
-        card.querySelector('.day-slots-list').innerHTML = '';
-        v.disponibilidades.forEach(d => addDaySlotRow(card, d));
-      }
-      if (Array.isArray(v.restricciones)) {
-        card.querySelector('.restricciones-list').innerHTML = '';
-        v.restricciones.forEach(r => addRestriccionRow(card, r));
-      }
-    },
-  },
 
   slider: {
     build(card, q) {
@@ -699,15 +689,68 @@ var TIPOS = {
   },
 
   textarea: {
-    build(card, q) {
-      const ta = document.createElement('textarea');
-      ta.placeholder = (q.config && q.config.placeholder) || '';
-      ta.addEventListener('input', triggerSave);
-      card.appendChild(ta);
-    },
-    read:  card => card.querySelector('textarea').value,
-    write: (card, q, v) => { if (v != null) card.querySelector('textarea').value = v; },
+  build(card, q) {
+    const maxLen = (q.config && q.config.maxlength) || 500;
+    const wrap = div('textarea-input-wrap');
+    
+    const ta = document.createElement('textarea');
+    ta.placeholder = (q.config && q.config.placeholder) || 'Escribe tu respuesta (soporta Markdown)...';
+    ta.maxLength = maxLen;
+    ta.rows = 4;
+    
+    const updateCounter = () => {
+      const len = ta.value.length;
+      counter.textContent = `${len} / ${maxLen}`;
+      counter.style.color = len > maxLen * 0.9 ? 'var(--accent)' : 'var(--muted)';
+    };
+    
+    const updatePreview = () => {
+      if (previewBox.style.display !== 'none') {
+        previewBox.innerHTML = ta.value 
+          ? renderMarkdown(ta.value) 
+          : '<em style="color:var(--muted)">Nada que previsualizar</em>';
+      }
+    };
+
+    ta.addEventListener('input', () => {
+      updateCounter();
+      updatePreview();
+      triggerSave();
+    });
+    
+    const footer = div('textarea-footer');
+    
+    const counter = document.createElement('span');
+    counter.className = 'textarea-counter';
+    
+    const previewToggle = document.createElement('button');
+    previewToggle.type = 'button';
+    previewToggle.className = 'btn-icon-subtle';
+    previewToggle.textContent = 'Vista previa';
+    previewToggle.addEventListener('click', () => {
+      const isHidden = previewBox.style.display === 'none';
+      previewBox.style.display = isHidden ? 'block' : 'none';
+      if (isHidden) updatePreview();
+    });
+    
+    footer.append(counter, previewToggle);
+    
+    const previewBox = div('textarea-preview md-content');
+    previewBox.style.display = 'none';
+    
+    updateCounter();
+    wrap.append(ta, footer, previewBox);
+    card.appendChild(wrap);
   },
+  read: card => card.querySelector('textarea').value,
+  write: (card, q, v) => { 
+    const ta = card.querySelector('textarea');
+    if (ta && v != null) {
+      ta.value = v;
+      ta.dispatchEvent(new Event('input')); // Dispara el contador y la preview
+    }
+  },
+},
 
   disponibilidad: {
     build(card) {
@@ -766,13 +809,13 @@ var TIPOS = {
     },
   },
 };
-// ── DEFINICIÓN DE FRANJAS Y MOTIVOS HORARIOS (Añadir en js/types.js) ────────
+// ── FRANJAS, MOTIVOS Y UTILIDADES DE HORARIOS ───────────────────────────────
 const FRANJAS_HORARIAS = [
-  { id: 'manana', label: '☀️ Mañana', sub: '10:00–14:00', start: 10.0, end: 14.0 },
-  { id: 'comida', label: '🍽️ Comida', sub: '14:00–17:00', start: 14.0, end: 17.0 },
-  { id: 'tarde',  label: '🎬 Tarde',  sub: '17:00–20:30', start: 17.0, end: 20.5 },
-  { id: 'cena',   label: '🍷 Cena',   sub: '20:30–00:00', start: 20.5, end: 24.0 },
-  { id: 'noche',  label: '🌙 Noche',  sub: '00:00–02:30', start: 24.0, end: 26.5 },
+  { id: 'manana', label: '☀️ Mañana', start: 10.0, end: 14.0 },
+  { id: 'comida', label: '🍽️ Comida', start: 14.0, end: 17.0 },
+  { id: 'tarde',  label: '🎬 Tarde',  start: 17.0, end: 20.5 },
+  { id: 'cena',   label: '🍷 Cena',   start: 20.5, end: 24.0 },
+  { id: 'noche',  label: '🌙 Noche',  start: 24.0, end: 26.5 },
 ];
 
 const MOTIVOS_RESTRICCION = [
@@ -782,48 +825,125 @@ const MOTIVOS_RESTRICCION = [
   { id: 'otro',    label: '⏳ Otro compromiso' },
 ];
 
-// Actualiza TOGGLES_DISP en js/types.js para incluir planes de ir y venir:
-const TOGGLES_DISP = [
-  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
-  ['soloFinde',      'Solo puedo fines de semana'],
-  ['meDaIgual',      'Me da igual entre semana o fin de semana'],
-  ['preferirPuente', 'Mejor si hay puente / festivo'],
-];
+// Franjas de la pregunta (config.franjas) o las de por defecto
+function getFranjas(q) {
+  const f = q && q.config && Array.isArray(q.config.franjas) && q.config.franjas.length ? q.config.franjas : null;
+  return f || FRANJAS_HORARIAS;
+}
+
+function fmtHM(h) {
+  const n = ((h % 24) + 24) % 24;
+  let hh = Math.floor(n), mm = Math.round((n - hh) * 60);
+  if (mm === 60) { hh = (hh + 1) % 24; mm = 0; }
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+const franjaSub = f => fmtHM(f.start) + '–' + fmtHM(f.end);
+
+// [{desde,hasta|fecha,franjas}] → Map fecha → Set(franjas)   (acepta formato antiguo {fecha})
+function dispToMap(list) {
+  const m = new Map();
+  (list || []).forEach(d => {
+    const a = d.desde || d.fecha, b = d.hasta || d.fecha || a;
+    if (!a || !Array.isArray(d.franjas) || !d.franjas.length || b < a) return;
+    const cur = new Date(a + 'T00:00:00Z'), end = new Date(b + 'T00:00:00Z');
+    for (let g = 0; cur <= end && g < 366; g++, cur.setUTCDate(cur.getUTCDate() + 1)) {
+      const iso = cur.toISOString().slice(0, 10);
+      const s = m.get(iso) || new Set();
+      d.franjas.forEach(f => s.add(f));
+      m.set(iso, s);
+    }
+  });
+  return m;
+}
+
+// Map → intervalos compactados (días consecutivos con las mismas franjas)
+function mapToDisp(m) {
+  const dias = [...m.keys()].filter(k => m.get(k).size).sort();
+  const out = []; let cur = null;
+  dias.forEach(f => {
+    const key = [...m.get(f)].sort().join(',');
+    if (cur && cur.key === key && diffDaysISO(cur.hasta, f) === 1) cur.hasta = f;
+    else { cur = { key, desde: f, hasta: f, franjas: [...m.get(f)] }; out.push(cur); }
+  });
+  return out.map(({ desde, hasta, franjas }) => ({ desde, hasta, franjas }));
+}
+
+// ¿Una restricción aplica a esta fecha? (sin fechas = todos los días)
+function restAplica(r, fecha) {
+  const a = r.fechaDesde || r.fecha || '';
+  const b = r.fechaHasta || r.fecha || r.fechaDesde || '';
+  if (!a && !b) return true;
+  return (!a || fecha >= a) && (!b || fecha <= b);
+}
+
+// Editor de franjas reutilizable (edición de pregunta y creación). Devuelve un getter.
+function buildFranjasEditor(host, franjas) {
+  host.innerHTML = '';
+  const list = div('franjas-editor');
+  const addRow = f => {
+    const row = div('franja-edit-row');
+    row.dataset.fid = f.id || '';
+    row.innerHTML = `
+      <input type="text" class="fe-label" value="${esc(f.label)}" placeholder="Nombre (p.ej. 🍽️ Comida)" maxlength="24">
+      <input type="time" class="fe-start" value="${fmtHM(f.start)}">
+      <span>→</span>
+      <input type="time" class="fe-end" value="${fmtHM(f.end)}">
+      <button type="button" class="btn-remove" title="Quitar franja">✕</button>`;
+    row.querySelector('.btn-remove').addEventListener('click', () => row.remove());
+    list.appendChild(row);
+  };
+  franjas.forEach(addRow);
+  const add = document.createElement('button');
+  add.type = 'button'; add.className = 'btn-add'; add.style.marginTop = '8px';
+  add.textContent = '+ Añadir franja';
+  add.addEventListener('click', () => addRow({ label: '', start: 18, end: 20 }));
+  host.append(list, add);
+
+  return () => [...list.querySelectorAll('.franja-edit-row')].map((r, i) => {
+    const label = r.querySelector('.fe-label').value.trim();
+    let s = parseHHMM(r.querySelector('.fe-start').value);
+    let e = parseHHMM(r.querySelector('.fe-end').value);
+    if (!label || s == null || e == null) return null;
+    if (s < 6) s += 24;          // madrugada = noche del mismo día
+    if (e <= s) e += 24;
+    return { id: r.dataset.fid || ('f' + Date.now().toString(36) + i), label, start: s, end: e };
+  }).filter(Boolean);
+}
 
 function addDaySlotRow(card, data = null) {
   const list = card.querySelector('.day-slots-list');
   if (!list) return;
+  const franjas = card.state.franjas || FRANJAS_HORARIAS;
   const row = div('day-slot-row');
-  const fechaVal = (data && data.fecha) ? data.fecha : hoyLocal();
-  const activeFranjas = new Set((data && Array.isArray(data.franjas)) ? data.franjas : ['comida', 'tarde', 'cena']);
+  const desde = (data && (data.desde || data.fecha)) || hoyLocal();
+  const hasta = (data && (data.hasta || data.fecha)) || desde;
+  let def = franjas.filter(f => ['comida', 'tarde', 'cena'].includes(f.id)).map(f => f.id);
+  if (!def.length) def = franjas.map(f => f.id);
+  const activas = new Set(data && Array.isArray(data.franjas) ? data.franjas : def);
 
   row.innerHTML = `
     <div class="day-slot-header">
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:0.8rem;color:var(--muted)">Día:</label>
-        <input type="date" class="slot-date-inp" value="${esc(fechaVal)}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="font-size:0.8rem;color:var(--muted)">Del</label>
+        <input type="date" class="slot-from" value="${esc(desde)}">
+        <label style="font-size:0.8rem;color:var(--muted)">al</label>
+        <input type="date" class="slot-to" value="${esc(hasta)}">
       </div>
-      <button type="button" class="btn-remove" title="Quitar día">✕</button>
+      <button type="button" class="btn-remove" title="Quitar intervalo">✕</button>
     </div>
     <div class="franjas-pills-row">
-      ${FRANJAS_HORARIAS.map(f => `
-        <button type="button" class="franja-pill ${activeFranjas.has(f.id) ? 'active' : ''}" data-fid="${f.id}">
-          <span>${f.label}</span>
-          <small>${f.sub}</small>
-        </button>
-      `).join('')}
-    </div>
-  `;
+      ${franjas.map(f => `
+        <button type="button" class="franja-pill ${activas.has(f.id) ? 'active' : ''}" data-fid="${esc(f.id)}">
+          <span>${esc(f.label)}</span><small>${franjaSub(f)}</small>
+        </button>`).join('')}
+    </div>`;
 
-  row.querySelector('.slot-date-inp').addEventListener('change', triggerSave);
+  const from = row.querySelector('.slot-from'), to = row.querySelector('.slot-to');
+  from.addEventListener('change', () => { if (!to.value || to.value < from.value) to.value = from.value; triggerSave(); });
+  to.addEventListener('change',   () => { if (!from.value || to.value < from.value) to.value = from.value; triggerSave(); });
   row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
-  row.querySelectorAll('.franja-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      btn.classList.toggle('active');
-      triggerSave();
-    });
-  });
-
+  row.querySelectorAll('.franja-pill').forEach(btn =>
+    btn.addEventListener('click', () => { btn.classList.toggle('active'); triggerSave(); }));
   list.appendChild(row);
 }
 
@@ -832,17 +952,22 @@ function addRestriccionRow(card, data = null) {
   if (!list) return;
   const row = div('restriccion-row');
   const motivo = (data && data.motivo) || 'clase';
-  const fecha  = (data && data.fecha)  || '';
-  const desde  = (data && data.desde)  || '16:00';
-  const hasta  = (data && data.hasta)  || '20:00';
-  const meUno  = data && data.meUnoAlSalir !== undefined ? !!data.meUnoAlSalir : true;
+  const fd    = (data && (data.fechaDesde || data.fecha)) || '';
+  const fh    = (data && (data.fechaHasta || data.fecha)) || '';
+  const desde = (data && data.desde) || '16:00';
+  const hasta = (data && data.hasta) || '20:00';
+  const meUno = data && data.meUnoAlSalir !== undefined ? !!data.meUnoAlSalir : true;
 
   row.innerHTML = `
     <div class="rest-grid">
       <select class="rest-motivo">
         ${MOTIVOS_RESTRICCION.map(m => `<option value="${m.id}" ${m.id === motivo ? 'selected' : ''}>${m.label}</option>`).join('')}
       </select>
-      <input type="date" class="rest-fecha" value="${esc(fecha)}" title="Fecha afectada (vacío = aplica a todos los días propuestos)">
+      <div class="rest-time-pair">
+        <input type="date" class="rest-fd" value="${esc(fd)}" title="Desde (vacío = todos los días)">
+        <span>→</span>
+        <input type="date" class="rest-fh" value="${esc(fh)}" title="Hasta">
+      </div>
       <div class="rest-time-pair">
         <input type="time" class="rest-desde" value="${esc(desde)}">
         <span>→</span>
@@ -854,13 +979,27 @@ function addRestriccionRow(card, data = null) {
       <label class="toggle-label" style="font-size:0.78rem;color:var(--muted)">
         <input type="checkbox" class="rest-join-after" ${meUno ? 'checked' : ''}>
         <span class="toggle-pill" style="transform:scale(0.8)"></span>
-        <span>⚡ Puedo incorporarme al plan en cuanto salga de esta obligación</span>
+        <span>⚡ Puedo incorporarme en cuanto salga de esta obligación</span>
       </label>
-      <span style="font-size:0.73rem;color:var(--muted)">* Si dejas la fecha vacía, el bloqueo se aplica a cualquier día.</span>
-    </div>
-  `;
+      <span style="font-size:0.73rem;color:var(--muted)">* Sin fechas = todos los días. Si cruza medianoche (22:00→02:00) también vale.</span>
+    </div>`;
 
+  const fdI = row.querySelector('.rest-fd'), fhI = row.querySelector('.rest-fh');
+  fdI.addEventListener('change', () => { if (fdI.value && (!fhI.value || fhI.value < fdI.value)) fhI.value = fdI.value; });
   row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
   row.querySelectorAll('select, input').forEach(el => el.addEventListener('change', triggerSave));
   list.appendChild(row);
+}
+// Garantiza: un valor por opción, a lo sumo un +3 y un −1. Convierte respuestas antiguas de checkbox (array) en +1.
+function normPond(v) {
+  if (Array.isArray(v)) { const o = {}; v.forEach(k => { o[k] = 1; }); return o; }
+  const out = {}; let fav = false, veto = false;
+  Object.entries(v || {}).forEach(([k, s]) => {
+    s = Number(s);
+    if (![-1, 1, 3].includes(s)) return;
+    if (s === 3  && fav)  return; if (s === 3)  fav = true;
+    if (s === -1 && veto) return; if (s === -1) veto = true;
+    out[k] = s;
+  });
+  return out;
 }

@@ -69,7 +69,7 @@ function tryRestoreSession() {
     const btn = $('btn-login');
     btn.textContent = 'Cargando…'; btn.disabled = true;
     try {
-      const datos = await api({ action: 'get_all', eid: saved.eid, nombre: saved.nombre, pinHash });
+      const datos = await api({ action: 'all', eid: saved.eid, nombre: saved.nombre, pinHash });
       user = { nombre: saved.nombre, pinHash, eid: saved.eid };
       lastRaw = JSON.stringify(datos);
       applyData(datos);
