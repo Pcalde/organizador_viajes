@@ -72,23 +72,6 @@ function createOptionCrudControls(item, q, rawOp) {
         </div>
       `;
     } else {
-      const nuevoTexto = prompt('Editar texto de la opción:', optKey);
-      if (!nuevoTexto || !nuevoTexto.trim() || nuevoTexto.trim() === optKey) return;
-      nuevaOpcion = nuevoTexto.trim();
-    }
-
-    try {
-      await apiAuth({
-        action: 'edit_opcion',
-        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
-        questionId: qid, oldOptKey: optKey, nuevaOpcion,
-      });
-      await pollOnce();
-      renderAllQuestions();
-      restoreDraft();
-      showStatus('Opción actualizada', 'ok', 2000);
-    } catch (err) {
-      showStatus('No se pudo editar la opción: ' + err.message, 'err');
       drawer.innerHTML = `
         <div class="opt-edit-single">
           <input type="text" class="inp-eo-text" value="${esc(curLabel)}" placeholder="Texto de la opción…">
@@ -430,6 +413,7 @@ function addDateRange(card, desde = null, hasta = null) {
 }
 
 const TOGGLES_DISP = [
+  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
   ['soloFinde',      'Solo puedo fines de semana'],
   ['meDaIgual',      'Me da igual entre semana o fin de semana'],
   ['preferirPuente', 'Mejor si hay puente / festivo'],
@@ -780,14 +764,6 @@ const MOTIVOS_RESTRICCION = [
   { id: 'trabajo', label: '💼 Trabajo / Turno' },
   { id: 'examen',  label: '📝 Examen / Entrega' },
   { id: 'otro',    label: '⏳ Otro compromiso' },
-];
-
-// Actualiza TOGGLES_DISP en js/types.js para incluir planes de ir y venir:
-const TOGGLES_DISP = [
-  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
-  ['soloFinde',      'Solo puedo fines de semana'],
-  ['meDaIgual',      'Me da igual entre semana o fin de semana'],
-  ['preferirPuente', 'Mejor si hay puente / festivo'],
 ];
 
 function addDaySlotRow(card, data = null) {
