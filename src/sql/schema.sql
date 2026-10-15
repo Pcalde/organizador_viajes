@@ -40,6 +40,13 @@ create table if not exists preguntas (
   creada   timestamptz not null default now(),
   primary key (eid, id)
 );
+-- Posición estable por encuesta para conservar el orden elegido en la interfaz.
+alter table preguntas add column if not exists pos integer;
+with orden_inicial as (
+  select eid, id, row_number() over (partition by eid order by seq)::integer as n
+  from preguntas where pos is null
+)
+update preguntas p set pos = o.n from orden_inicial o where p.eid = o.eid and p.id = o.id;
 
 create table if not exists respuestas (
   eid     text not null references encuestas on delete cascade,
@@ -203,6 +210,26 @@ begin
   return _snapshot(p_eid);
 end $$;
 
+-- Permite a cada participante borrar su propia cuenta y todos sus datos asociados.
+create or replace function delete_participant(p_eid text, p_nombre text, p_pin text, p_participante text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb; nm text;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  nm := a->>'nombre';
+  if lower(btrim(coalesce(p_participante, ''))) <> lower(nm) then
+    return jsonb_build_object('error', 'Solo puedes eliminar tu propia participación');
+  end if;
+
+  delete from respuestas where eid = p_eid and lower(nombre) = lower(nm);
+  delete from ausencias where eid = p_eid and lower(votante) = lower(nm);
+  delete from proscontras where eid = p_eid and lower(autor) = lower(nm);
+  delete from debate where eid = p_eid and lower(autor) = lower(nm);
+  delete from usuarios where eid = p_eid and lower(nombre) = lower(nm);
+  return jsonb_build_object('ok', true);
+end $$;
+
 create or replace function submit_response(p_eid text, p_nombre text, p_pin text, p_answers jsonb)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare a jsonb;
@@ -325,9 +352,32 @@ begin
      where jsonb_typeof(e) = 'string' and btrim(e #>> '{}') <> '';
   end if;
 
-  insert into preguntas (eid, id, tipo, label, opciones, config, autor)
-  values (p_eid, v_id, v_tipo, v_label, v_op, v_cfg, a->>'nombre')
+  insert into preguntas (eid, id, tipo, label, opciones, config, autor, pos)
+  values (p_eid, v_id, v_tipo, v_label, v_op, v_cfg, a->>'nombre',
+          coalesce((select max(pos) + 1 from preguntas where eid = p_eid), 1))
   on conflict (eid, id) do nothing;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function reordenar_preguntas(p_eid text, p_nombre text, p_pin text, p_ids jsonb)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb; total_db integer; total_ids integer;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  if jsonb_typeof(p_ids) is distinct from 'array' then
+    return jsonb_build_object('error', 'Orden de preguntas inválido');
+  end if;
+  select count(*) into total_db from preguntas where eid = p_eid;
+  select count(distinct value) into total_ids from jsonb_array_elements_text(p_ids);
+  if total_ids <> total_db or jsonb_array_length(p_ids) <> total_db
+     or exists (select 1 from jsonb_array_elements_text(p_ids) x
+                 where not exists (select 1 from preguntas q where q.eid = p_eid and q.id = x.value)) then
+    return jsonb_build_object('error', 'La lista de preguntas no coincide con la encuesta');
+  end if;
+  update preguntas q set pos = x.ord::integer
+    from jsonb_array_elements_text(p_ids) with ordinality as x(value, ord)
+   where q.eid = p_eid and q.id = x.value;
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -454,6 +504,8 @@ revoke all on function crear_encuesta(text)                   from public, anon,
 grant execute on function
   entrar(text, text, text),
   get_all(text, text, text),
+  delete_participant(text, text, text, text),
+  reordenar_preguntas(text, text, text, jsonb),
   submit_response(text, text, text, jsonb),
   vote_ausencia(text, text, text, jsonb, int),
   add_opcion(text, text, text, text, jsonb),
