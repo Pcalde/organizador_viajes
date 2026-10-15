@@ -147,11 +147,11 @@ language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'schema', coalesce((
       select jsonb_agg(jsonb_build_object('id', p.id, 'tipo', p.tipo, 'label', p.label,
-                                          'opciones', p.opciones, 'config', p.config) order by p.seq)
+                                          'opciones', p.opciones, 'config', p.config) order by coalesce(p.pos, p.seq + 1000000))
         from preguntas p where p.eid = p_eid), '[]'::jsonb),
     'proscontras', coalesce((
-      select jsonb_agg(jsonb_build_object('qid', c.qid, 'optKey', c.opt_key, 'tipo', c.tipo,
-                                          'texto', c.texto, 'autor', c.autor, 'ts', c.ts) order by c.id)
+      select jsonb_agg(jsonb_build_object('id', c.id, 'qid', c.qid, 'optKey', c.opt_key, 'tipo', c.tipo,
+                   'texto', c.texto, 'autor', c.autor, 'votos', c.votos, 'ts', c.ts) order by c.id)
         from proscontras c where c.eid = p_eid), '[]'::jsonb),
     'respondentes', coalesce((
       select jsonb_agg(jsonb_build_object(
