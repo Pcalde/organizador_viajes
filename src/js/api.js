@@ -6,6 +6,7 @@ const RPC = {
   crear_encuesta:  { fn: 'crear_encuesta_publica', args: b => ({ ...ident(b), p_plantilla: b.plantilla || 'vacia', p_titulo: b.titulo || 'Cuestionario de viaje' }) },
   entrar:          { fn: 'entrar',          args: b => ident(b) },
   all:             { fn: 'get_all',         args: b => ident(b) },
+  delete_participant: { fn: 'delete_participant', args: b => ({ ...ident(b), p_participante: b.participant }) },
   submit_response: { fn: 'submit_response', args: b => ({ ...ident(b), p_answers: b.answers }) },
   vote_ausencia:   { fn: 'vote_ausencia',   args: b => ({ ...ident(b), p_candidatos: b.candidatos, p_prob: b.prob_propia }) },
   add_pregunta:    { fn: 'add_pregunta',    args: b => ({ ...ident(b), p_pregunta: b.pregunta }) },

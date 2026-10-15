@@ -1439,6 +1439,10 @@ function buildRadioConsensus(card, q, myVal) {
 }
 
 function buildTextareaConsensus(card, q) {
+    if (q.config?.descripcion) {
+        card.innerHTML += `<div class="md-content">${renderMarkdown(q.config.descripcion)}</div>`;
+        return;
+    }
     const notes = [];
     respuestas.forEach(r => {
         const v = extractAnswer(r.answers, q);

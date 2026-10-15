@@ -160,6 +160,9 @@ async function submitNewQuestion() {
 
   try {
     await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta });
+    // Refresca el snapshot (incluida la posición inicial asignada por SQL).
+    lastRaw = '';
+    await pollOnce();
   } catch (e) {
     if (card) card.remove();
     const i = schema.indexOf(pregunta);

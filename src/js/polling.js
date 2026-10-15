@@ -93,4 +93,5 @@ function applyPollUpdate(data) {
   if ((debateChanged || pcChanged || schemaChanged) && typeof renderDebate === 'function') {
     renderDebate();
   }
+  if (typeof renderParticipants === 'function') renderParticipants();
 }

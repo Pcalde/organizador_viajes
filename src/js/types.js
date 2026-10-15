@@ -690,66 +690,13 @@ var TIPOS = {
 
   textarea: {
   build(card, q) {
-    const maxLen = (q.config && q.config.maxlength) || 500;
-    const wrap = div('textarea-input-wrap');
-    
-    const ta = document.createElement('textarea');
-    ta.placeholder = (q.config && q.config.placeholder) || 'Escribe tu respuesta (soporta Markdown)...';
-    ta.maxLength = maxLen;
-    ta.rows = 4;
-    
-    const updateCounter = () => {
-      const len = ta.value.length;
-      counter.textContent = `${len} / ${maxLen}`;
-      counter.style.color = len > maxLen * 0.9 ? 'var(--accent)' : 'var(--muted)';
-    };
-    
-    const updatePreview = () => {
-      if (previewBox.style.display !== 'none') {
-        previewBox.innerHTML = ta.value 
-          ? renderMarkdown(ta.value) 
-          : '<em style="color:var(--muted)">Nada que previsualizar</em>';
-      }
-    };
-
-    ta.addEventListener('input', () => {
-      updateCounter();
-      updatePreview();
-      triggerSave();
-    });
-    
-    const footer = div('textarea-footer');
-    
-    const counter = document.createElement('span');
-    counter.className = 'textarea-counter';
-    
-    const previewToggle = document.createElement('button');
-    previewToggle.type = 'button';
-    previewToggle.className = 'btn-icon-subtle';
-    previewToggle.textContent = 'Vista previa';
-    previewToggle.addEventListener('click', () => {
-      const isHidden = previewBox.style.display === 'none';
-      previewBox.style.display = isHidden ? 'block' : 'none';
-      if (isHidden) updatePreview();
-    });
-    
-    footer.append(counter, previewToggle);
-    
-    const previewBox = div('textarea-preview md-content');
-    previewBox.style.display = 'none';
-    
-    updateCounter();
-    wrap.append(ta, footer, previewBox);
-    card.appendChild(wrap);
+    // Este tipo es una tarjeta informativa, no una pregunta que requiera respuesta.
+    const content = div('textarea-comment md-content');
+    content.innerHTML = q.config?.descripcion ? renderMarkdown(q.config.descripcion) : '';
+    if (content.innerHTML) card.appendChild(content);
   },
-  read: card => card.querySelector('textarea').value,
-  write: (card, q, v) => { 
-    const ta = card.querySelector('textarea');
-    if (ta && v != null) {
-      ta.value = v;
-      ta.dispatchEvent(new Event('input')); // Dispara el contador y la preview
-    }
-  },
+  read: () => null,
+  write: () => {},
 },
 
   disponibilidad: {

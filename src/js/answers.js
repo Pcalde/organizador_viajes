@@ -24,6 +24,7 @@ function triggerSave() {
 function readState() {
   const answers = {};
   schema.forEach(q => {
+    if (q.tipo === 'textarea') return; // tarjeta informativa, no tiene respuesta
     const card = cardFor(q.id), type = TIPOS[q.tipo];
     if (card && type) answers[q.id] = type.read(card, q);
   });
@@ -45,6 +46,7 @@ function restoreDraft() {
     }
     const d = JSON.parse(raw);
     schema.forEach(q => {
+      if (q.tipo === 'textarea') return;
       const card = cardFor(q.id), type = TIPOS[q.tipo];
       if (!card || !type || !d.answers || !(q.id in d.answers)) return;
       try { type.write(card, q, d.answers[q.id]); }
@@ -64,6 +66,7 @@ function hydrateFromServerIfNoDraft() {
   if (!mine || !mine.answers) return;
 
   schema.forEach(q => {
+    if (q.tipo === 'textarea') return;
     const card = cardFor(q.id), type = TIPOS[q.tipo];
     const val  = extractAnswer(mine.answers, q);
     if (card && type && val != null) {

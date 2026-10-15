@@ -87,6 +87,8 @@ function applyData(data) {
   const cDeb = $('count-debate');
   if (cDeb) cDeb.textContent = debate.length + proscontras.length;
 
+  if (typeof renderParticipants === 'function') renderParticipants();
+
   // Si estamos viendo Consenso o Debate, repintar inmediatamente
   if (activeMode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (activeMode === 'debate'    && typeof renderDebate === 'function')       renderDebate();

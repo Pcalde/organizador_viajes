@@ -62,12 +62,6 @@ function buildQuestionCard(q, idx) {
         </div>
       ` : ''}
 
-      ${q.tipo === 'textarea' ? `
-        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-          <label style="font-size:0.78rem;color:var(--muted)">Límite de caracteres:</label>
-          <input type="number" class="inp-eq-maxlen" value="${cfg.maxlength ?? 500}" min="50" max="2000" style="width:80px">
-        </div>
-      ` : ''}
       ${q.tipo === 'horarios' ? `
         <label style="font-size:0.78rem;color:var(--muted)">Duración ideal del plan (h)</label>
         <input type="number" class="inp-eq-dur" value="${cfg.duracionIdeal ?? 3}" min="1" max="12">
@@ -75,7 +69,7 @@ function buildQuestionCard(q, idx) {
         <div class="eq-franjas-host"></div>
       ` : ''}
       <label style="font-size:0.78rem;color:var(--muted)">Descripción / texto explicativo (opcional)</label>
-      <textarea class="inp-edit-q-desc" rows="2" maxlength="500">${esc(cfg.descripcion || '')}</textarea>
+        <textarea class="inp-edit-q-desc" rows="2" maxlength="500" placeholder="Texto que verá el grupo bajo el título">${esc(cfg.descripcion || '')}</textarea>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" class="btn-pc btn-cancel-eq">Cancelar</button>
         <button type="button" class="btn-propose btn-save-eq" style="padding:6px 14px;font-size:0.8rem">Guardar cambios</button>
@@ -105,10 +99,6 @@ function buildQuestionCard(q, idx) {
       newCfg.franjas = getFr();
       if (!newCfg.franjas.length) { showStatus('Define al menos una franja válida', 'err'); return; }
       newCfg.duracionIdeal = Math.max(1, Math.min(12, Number(editBox.querySelector('.inp-eq-dur').value) || 3));
-    }
-    if (q.tipo === 'textarea') {
-      const rawMax = Number(editBox.querySelector('.inp-eq-maxlen').value);
-      newCfg.maxlength = Math.max(50, Math.min(2000, isNaN(rawMax) ? 500 : rawMax));
     }
     newCfg.descripcion = editBox.querySelector('.inp-edit-q-desc').value.trim();
     try {
@@ -294,6 +284,7 @@ async function moverPregunta(qid, dir) {
   try {
     await apiAuth({ action: 'reordenar_preguntas', eid: user.eid, nombre: user.nombre,
                     pinHash: user.pinHash, ids: schema.map(x => x.id) });
+    lastRaw = ''; // Aplicar el orden confirmado del servidor en el siguiente sondeo.
     pollOnce();
   } catch (e) {
     [schema[i], schema[j]] = [schema[j], schema[i]];
