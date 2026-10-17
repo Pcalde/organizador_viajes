@@ -87,12 +87,15 @@
       <span>1. Tu Cuestionario</span>
       <span class="tab-badge" id="badge-draft" style="display:none">● Borrador</span>
     </button>
+    <button type="button" class="mode-tab" data-mode="mapa">
+      <span>2. Mapa</span>
+    </button>
     <button type="button" class="mode-tab" data-mode="consensus">
-      <span>2. Consenso y Reformulario</span>
+      <span>3. Consenso y Reformulario</span>
       <span class="tab-count" id="count-resp">0</span>
     </button>
     <button type="button" class="mode-tab" data-mode="debate">
-      <span>3. Sala de Debate</span>
+      <span>4. Sala de Debate</span>
       <span class="tab-count" id="count-debate">0</span>
     </button>
   </nav>
@@ -190,7 +193,10 @@
 
   </div><!-- /view-survey -->
 
-  <!-- ── VISTA 2: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
+  <!-- ── VISTA 2: MAPA DE DESTINOS ─────────────────────────────────────── -->
+  <div class="wide-wrap" id="view-mapa" style="display:none"></div>
+
+  <!-- ── VISTA 3: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
   <div class="wide-wrap" id="view-consensus" style="display:none">
     <div id="consensus-container" style="display:flex;flex-direction:column;gap:20px"></div>
   </div>

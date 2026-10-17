@@ -75,6 +75,83 @@ function parsePrecioNumerico(raw) {
   return m ? parseFloat(m[1].replace(',', '.')) : null;
 }
 
+// ── 2b. CRUCE DE HORARIOS (capa B del modelo de dos capas) ──────────────────
+// Solape horario mínimo exigido entre miembros del núcleo, en horas.
+var UMBRAL_HORA_SOLAPE = 1.5;
+
+// Normaliza la duración del plan: enteros [1..12] se interpretan como nº de
+// franjas consecutivas; reales > 12 se interpretan como horas.
+function duracionPlanHoras(qHor) {
+  const raw = qHor && qHor.config ? Number(qHor.config.duracionHoras) : NaN;
+  if (!isFinite(raw) || raw <= 0) return 3;
+  if (raw <= 12) {
+    const f = getFranjas(qHor);
+    return Math.max(1, Math.round(raw)) * (f[0].end - f[0].start);
+  }
+  return raw;
+}
+
+// Conjunto de intervalos horarios [ini, fin) en los que el viajero está libre
+// un día dado: union de sus franjas disponibles expandidas por la duración
+// ideal del plan (deslizando la ventana hacia atrás para respetar la longitud).
+function ventanasHorariasDelDia(franjasIds, durH, franjas) {
+  const ivs = [];
+  franjas.forEach(f => {
+    if (!franjasIds.includes(f.id)) return;
+    const ini = Math.max(f.start, f.end - durH);
+    ivs.push([ini, f.end]);
+  });
+  if (!ivs.length) return [];
+  const merged = [];
+  ivs.sort((a, b) => a[0] - b[0]);
+  let cur = ivs[0];
+  for (let i = 1; i < ivs.length; i++) {
+    if (ivs[i][0] <= cur[1]) cur[1] = Math.max(cur[1], ivs[i][1]);
+    else { merged.push(cur); cur = ivs[i]; }
+  }
+  merged.push(cur);
+  return merged;
+}
+
+// Intersección de listas de intervalos; devuelve [] si el cruce es vacío.
+function intersectIntervalLists(A, B) {
+  const out = [];
+  for (const [a1, a2] of A) {
+    for (const [b1, b2] of B) {
+      const lo = Math.max(a1, b1), hi = Math.min(a2, b2);
+      if (hi > lo) out.push([lo, hi]);
+    }
+  }
+  return out;
+}
+
+function fmtHoraDecimal(h) {
+  if (h >= 24) return 'd+' + fmtHM(h);
+  return fmtHM(h);
+}
+
+// Cruce de horarios entre dos viajeros para una ventana de días dada:
+// mayor solape efectivo (horas) y franja resultante. null si no hay cruce.
+function cruzarHorariosPareja(vA, vB, diasRango, durH, franjas) {
+  if (!vA.horFranjasPorDia || !vB.horFranjasPorDia) return null;
+  let best = null;
+  for (const d of diasRango) {
+    const fa = vA.horFranjasPorDia[d], fb = vB.horFranjasPorDia[d];
+    if (!fa || !fb) continue;
+    const inter = intersectIntervalLists(
+      ventanasHorariasDelDia(fa, durH, franjas),
+      ventanasHorariasDelDia(fb, durH, franjas)
+    );
+    for (const iv of inter) {
+      const len = iv[1] - iv[0];
+      if (!best || len > best.solape) best = { dia: d, ini: iv[0], fin: iv[1], solape: len };
+    }
+  }
+  if (!best) return null;
+  best.texto = `${fmtShortDate(best.dia)} ${fmtHoraDecimal(best.ini)}–${fmtHoraDecimal(best.fin)}`;
+  return best;
+}
+
 // ── 2. NORMALIZACIÓN Y MATRIZ DE DISPONIBILIDAD (Port de datos.py) ──────────
 function buildModelData() {
   const qDisp  = schema.find(q => q.tipo === 'disponibilidad');
@@ -144,6 +221,16 @@ function buildModelData() {
       else return; // Descarta participantes sin fechas válidas (como datos.py)
     }
 
+    // Capa B del modelo: mapa fecha → ids de franjas horarias declaradas.
+    // Quien no rellena horarios queda con null (restricción laxa: compatible
+    // con cualquiera), pero quien sí los rellenas exige cruce real (ver motor).
+    const horFranjasPorDia = hor && Array.isArray(hor.disponibilidades) ? {} : null;
+    if (horFranjasPorDia) {
+      dispToMap(hor.disponibilidades).forEach((setIds, f) => {
+        if (conjuntoFechas.has(f)) horFranjasPorDia[f] = [...setIds];
+      });
+    }
+
     conjuntoFechas.forEach(f => allDatesSet.add(f));
 
     const estadoTrans = trans ? (typeof trans === 'object' ? trans.estado : String(trans)) : '';
@@ -187,6 +274,7 @@ function buildModelData() {
       opcionesList,
       irYVenir,
       meDaIgual,
+      horFranjasPorDia,
       preferirPuente: prefPuente,
       probEfectiva: getEffectiveProb(r.nombre),
       tieneLogistica: !!String(estadoTrans || '').trim(),
@@ -530,20 +618,69 @@ function ejecutarMotorFactibilidad(model) {
   const { viajeros, indiceFechas, matriz, lMaxEval } = model;
   if (!viajeros.length || indiceFechas.length < 2) return { soluciones: [], diagnosticos: [] };
 
+  const qHor = schema.find(q => q.tipo === 'horarios');
+  const durH = qHor ? duracionPlanHoras(qHor) : null;
+  const franjas = qHor ? getFranjas(qHor) : null;
+
+  // Cruce de la capa horaria B entre todos los miembros del núcleo que
+  // declararon horarios: si dos incompatibles coinciden en la ventana,
+  // el núcleo se descarta (resuelve el caso "fechas sí/horarios no" y viceversa).
+  function cruzHorarioNucleo(nombresNucleo, diasRango) {
+    if (!qHor) return { ok: true, solape: null };
+    const conHor = nombresNucleo
+      .map(n => viajeros.find(v => v.nombre === n))
+      .filter(v => v && v.horFranjasPorDia);
+    if (conHor.length < 2) return { ok: true, solape: null };
+    let best = null;
+    for (let i = 0; i < conHor.length; i++) {
+      for (let j = i + 1; j < conHor.length; j++) {
+        const c = cruzarHorariosPareja(conHor[i], conHor[j], diasRango, durH, franjas);
+        if (!c || c.solape < UMBRAL_HORA_SOLAPE) return { ok: false, solape: c };
+        if (!best || c.solape > best.solape) best = c;
+      }
+    }
+    return { ok: true, solape: best };
+  }
+
   const candidatosBrutos = [];
   const diagnosticos = [];
 
   const lMin = model.lMinEval || 1; // Permite evaluar excursiones de 1 día (L = 1)
+
+  // Núcleo con reglas de la capa A: pernocta exige L ≥ 2 y diaMax suficiente;
+  // "ir y venir" solo participa en excursiones (L = 1) salvo "me da igual".
+  function nucleoPernocta(L, diasRango) {
+    return viajeros
+      .filter(v => !(v.irYVenir && !v.meDaIgual && L > 1) &&
+                   v.diasMax >= L && diasRango.every(d => matriz[d][v.nombre] === 1))
+      .map(v => v.nombre);
+  }
+
+  // Relajación para L = 1: si nadie forma núcleo de fin de semana, se aceptan
+  // núcleos de un día que incluyan excursionistas (quien vota "ir y venir").
+  function nucleoExcursion(fIni) {
+    if (!viajeros.some(v => v.irYVenir)) return [];
+    return viajeros
+      .filter(v => v.diasMax >= 1 && matriz[fIni]?.[v.nombre] === 1)
+      .map(v => v.nombre);
+  }
+
   for (let L = lMin; L <= lMaxEval; L++) {
     for (let i = 0; i <= indiceFechas.length - L; i++) {
       const diasRango = indiceFechas.slice(i, i + L);
       const fIni = diasRango[0], fFin = diasRango[diasRango.length - 1];
 
-      const nombresNucleo = viajeros
-        .filter(v => v.diasMax >= L && diasRango.every(d => matriz[d][v.nombre] === 1))
-        .map(v => v.nombre);
+      let nombresNucleo = nucleoPernocta(L, diasRango);
+      const esExcursion = L === 1 && nombresNucleo.length < 2;
+      if (esExcursion) nombresNucleo = nucleoExcursion(fIni);
 
       if (nombresNucleo.length < 2) continue;
+
+      const cruceHor = cruzHorarioNucleo(nombresNucleo, diasRango);
+      if (!cruceHor.ok) {
+        diagnosticos.push(`Ventana ${fmtShortDate(fIni)}–${fmtShortDate(fFin)} (${L}d): horarios incompatibles entre el núcleo (solape < ${UMBRAL_HORA_SOLAPE} h).`);
+        continue;
+      }
 
       const nucleoSet = new Set(nombresNucleo);
       const minSatDays = L === 1 ? 1 : 2;
@@ -612,6 +749,8 @@ function ejecutarMotorFactibilidad(model) {
         fFin,
         diasRango,
         incluyeFinde,
+        cruceHorario: cruceHor.solape,
+        excursion: esExcursion || (L === 1 && viajeros.some(v => v.irYVenir && nucleoSet.has(v.nombre))),
         N: nTotal,
         N_full: asistentesNucleo.length,
         N_convoy: satelitesAsignados.length,
@@ -776,6 +915,7 @@ function renderReformulario() {
   const topo = computeTopologyAndSensitivity(model, soluciones);
 
   container.appendChild(buildExecutiveSummaryCard(model, soluciones, topo));
+  container.appendChild(buildPreferenciasBooleanasCard(model));
   container.appendChild(buildFeasibleSolutionsSection(soluciones, diagnosticos, topo));
 
   if (model.viajeros.length >= 2) {
@@ -860,6 +1000,72 @@ function buildExecutiveSummaryCard(model, soluciones, topo) {
   return card;
 }
 
+// ── TABLA DE PREFERENCIAS BOOLEANAS POR VIAJERO ─────────────────────────────
+// Muestra de un vistazo quién votó ir y venir, quién prefiere solo finde,
+// quién no tiene preferencia de día y quién prefiere puente. Sin emojis:
+// celdas con check/cruz y color según el caso.
+function buildPreferenciasBooleanasCard(model) {
+  const card = div('card pref-bool-card');
+
+  if (!model.viajeros.length) {
+    card.innerHTML = `
+      <div class="card-title"><span class="num">P</span> Preferencias booleanas</div>
+      <p style="color:var(--muted);font-size:0.85rem">Sin viajeros con fechas válidas todavía.</p>`;
+    return card;
+  }
+
+  const cols = [
+    { key: 'diasMax',      label: 'Días máx.',   type: 'num' },
+    { key: 'irYVenir',     label: 'Ir y venir',  type: 'bool' },
+    { key: 'soloFinde',    label: 'Solo finde',  type: 'bool' },
+    { key: 'meDaIgual',    label: 'Me da igual', type: 'bool' },
+    { key: 'preferirPuente', label: 'Preferir puente', type: 'bool' },
+    { key: '_horarios',    label: 'Horarios',    type: 'tri' },
+    { key: '_fechas',      label: 'Fechas',      type: 'tri' },
+  ];
+
+  const cellHtml = (v, col) => {
+    if (col.type === 'num') return `<td><b>${v.diasMax}</b></td>`;
+    if (col.type === 'bool') {
+      const on = !!v[col.key];
+      return `<td class="${on ? 'pb-yes' : 'pb-no'}">${on ? 'Sí' : 'No'}</td>`;
+    }
+    // tri: horarios/fechas rellenos o no (relevante para el cruce del motor)
+    let val;
+    if (col.key === '_horarios') val = v.horFranjasPorDia && Object.keys(v.horFranjasPorDia).length;
+    else val = v.conjuntoFechas && v.conjuntoFechas.size;
+    return `<td class="${val ? 'pb-yes' : 'pb-miss'}">${val ? 'Relleno' : 'Sin dato'}</td>`;
+  };
+
+  card.innerHTML = `
+    <div class="card-title"><span class="num">P</span> Preferencias booleanas por viajero</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px">
+      Estado declarado por cada participante. Las columnas "Horarios" y "Fechas" indican
+      qué fuentes alimentan el cruce de soluciones del motor: un viajero sin una de ellas
+      se trata con restricción laxa (compatible con quien sí la rellena).
+    </p>
+    <div style="overflow-x:auto">
+      <table class="compat-matrix-table pb-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Viajero</th>
+            ${cols.map(c => `<th>${esc(c.label)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${model.viajeros.map(v => `
+            <tr>
+              <th style="text-align:left">${esc(v.nombre)}</th>
+              ${cols.map(c => cellHtml(v, c)).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  return card;
+}
+
 // ── RENDER DE SOLUCIONES ÓPTIMAS (Port visual de reporte.py) ────────────────
 function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
   const wrap = div('ref-solutions-wrap');
@@ -870,11 +1076,11 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
       <div class="card" style="border-color:var(--accent)">
         <div class="card-title"><span class="num" style="background:var(--accent)">!</span> Sin soluciones simultáneamente factibles en fechas y transporte</div>
         <p style="font-size:0.86rem;color:var(--muted);margin-bottom:10px">
-          El optimizador evaluó todas las ventanas de >= 2 días con al menos 2 miembros de núcleo, pero ninguna superó las restricciones de capacidad de vehículos o solapamiento:
+          El optimizador evaluó todas las ventanas con al menos 2 miembros de núcleo, pero ninguna superó las restricciones de capacidad de vehículos, solapamiento de fechas o cruce de horarios:
         </p>
         ${diagHtml ? `<ul style="font-size:0.8rem;color:var(--muted);padding-left:18px;margin-bottom:10px">${diagHtml}</ul>` : ''}
         <p style="font-size:0.84rem;color:var(--ink)">
-          💡 <b>Usa el Reformulario más abajo</b> para ampliar tus fechas o cambiar tu opción de transporte a <em>"Llevo coche"</em> y desbloquear soluciones.
+          <b>Usa el Reformulario más abajo</b> para ampliar tus fechas, indicar franjas horarias compatibles o cambiar tu opción de transporte a <em>"Llevo coche"</em> y desbloquear soluciones.
         </p>
       </div>
     `;
@@ -884,6 +1090,10 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
   soluciones.forEach((sol, idx) => {
     const card = div('card sol-card');
     const tagFinde = sol.incluyeFinde ? 'Incluye Fin de Semana' : 'Solo entre semana';
+    const tagExcursion = (sol.excursion || sol.L === 1) ? ' · Excursión (ir y venir)' : '';
+    const cruceStr = sol.cruceHorario
+      ? ` · Cruce horario: ${sol.cruceHorario.texto} (${sol.cruceHorario.solape.toFixed(1)} h)`
+      : '';
     const pStr = sol.pMaxGrupo != null ? `${sol.pMaxGrupo} €` : 'N/A';
     const logOn = !(sol.flujo && sol.flujo.sinLogistica);
     const sinDato = logOn ? sol.viajerosAsignados.filter(v => !v.tieneLogistica).map(v => v.nombre) : [];
@@ -971,8 +1181,8 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
     card.innerHTML = `
       <div class="sol-card-head">
         <div>
-          <span class="sol-tag">Solución Óptima #${idx + 1} · ${tagFinde}</span>
-          <h3 class="sol-interval">📅 ${fmtShortDate(sol.fIni)} → ${fmtShortDate(sol.fFin)} (${sol.L} días)</h3>
+          <span class="sol-tag">Solución Óptima #${idx + 1} · ${tagFinde}${esc(tagExcursion)}</span>
+          <h3 class="sol-interval">${fmtShortDate(sol.fIni)} → ${fmtShortDate(sol.fFin)} (${sol.L} días)${esc(cruceStr)}</h3>
         </div>
         <div class="sol-pills">
           <span class="sol-pill">Total <b>${sol.N}</b></span>
