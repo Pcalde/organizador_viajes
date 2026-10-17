@@ -98,29 +98,53 @@ function buildModelData() {
 
     const diasMax = Math.max(1, parseInt((disp && disp.diasMax) ?? ans.diasMax ?? (qDisp ? 5 : 1), 10) || 1);
     const soloFinde = !!(disp && disp.soloFinde);
+    const irYVenir  = !!(disp && disp.irYVenir);
+    const meDaIgual = !!(disp && disp.meDaIgual);
+    const prefPuente = !!(disp && disp.preferirPuente);
     const rangos = (disp && Array.isArray(disp.rangos)) ? disp.rangos : (ans.rangosFechas || []);
 
-    const conjuntoFechas = new Set();
+    // ── CRUCE DE FUENTES: fechas de disponibilidad + franjas de horarios ──
+    // Antes se usaban las fechas SOLO si existían; si alguien rellenaba horarios
+    // pero no fechas, sus días quedaban fuera del modelo (y viceversa). Ahora se
+    // unen ambas fuentes y se intersectan con el rango de fechas cuando ambos lo
+    // rellenan y se solapan (intersección no vacía); si no se solapan, la unión.
+    const rangoSet = new Set();
     rangos.forEach(rg => {
       if (!rg || !rg.desde || !rg.hasta || rg.hasta < rg.desde) return;
       const cur = new Date(rg.desde + 'T00:00:00Z');
       const end = new Date(rg.hasta + 'T00:00:00Z');
       let guard = 0;
       while (cur <= end && guard < 180) {
-        const iso = cur.toISOString().slice(0, 10);
-        if (!soloFinde || isSatSunISO(iso) || new Date(iso + 'T00:00:00Z').getUTCDay() === 5) {
-          conjuntoFechas.add(iso);
-          allDatesSet.add(iso);
-        }
+        rangoSet.add(cur.toISOString().slice(0, 10));
         cur.setUTCDate(cur.getUTCDate() + 1);
         guard++;
       }
     });
-        // Quedadas: si no hay fechas de "disponibilidad", se derivan de los intervalos de horarios
-    if (conjuntoFechas.size === 0 && hor && Array.isArray(hor.disponibilidades)) {
-      for (const f of dispToMap(hor.disponibilidades).keys()) { conjuntoFechas.add(f); allDatesSet.add(f); }
+
+    const horFechas = new Set();
+    if (hor && Array.isArray(hor.disponibilidades)) {
+      for (const f of dispToMap(hor.disponibilidades).keys()) horFechas.add(f);
     }
-    if (conjuntoFechas.size === 0) return; // Descarta participantes sin fechas válidas (como datos.py)
+
+    let conjuntoFechas = new Set([...rangoSet, ...horFechas]);
+    if (rangoSet.size && horFechas.size) {
+      const inter = new Set([...rangoSet].filter(f => horFechas.has(f)));
+      if (inter.size) conjuntoFechas = inter; // ambas fuentes rellenas y compatibles → cruce estricto
+    }
+
+    // Filtro "solo fines de semana" aplicado a la unión/cruce resultante
+    if (soloFinde && conjuntoFechas.size) {
+      conjuntoFechas = new Set([...conjuntoFechas].filter(isWeekendISO));
+    }
+    if (conjuntoFechas.size === 0) {
+      // Fallback: sin fechas en ninguna de las dos fuentes, la última franja horaria
+      // propia registrada en esta sesión da un día candidato (quedadas de un día).
+      const fb = lastHorariosRange && (lastHorariosRange.desde || lastHorariosRange.fecha);
+      if (fb) { conjuntoFechas.add(fb); allDatesSet.add(fb); }
+      else return; // Descarta participantes sin fechas válidas (como datos.py)
+    }
+
+    conjuntoFechas.forEach(f => allDatesSet.add(f));
 
     const estadoTrans = trans ? (typeof trans === 'object' ? trans.estado : String(trans)) : '';
     const cs = qTrans ? getRadioStepperConfig(qTrans) : null;
@@ -161,6 +185,9 @@ function buildModelData() {
       conjuntoFechas,
       casasParsed,
       opcionesList,
+      irYVenir,
+      meDaIgual,
+      preferirPuente: prefPuente,
       probEfectiva: getEffectiveProb(r.nombre),
       tieneLogistica: !!String(estadoTrans || '').trim(),
     });
