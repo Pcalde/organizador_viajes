@@ -8,13 +8,24 @@ function switchMode(mode) {
   });
 
   const vSurvey    = $('view-survey');
+  const vMapa      = $('view-mapa');
   const vConsensus = $('view-consensus');
   const vDebate    = $('view-debate');
 
   if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
+  if (vMapa)      vMapa.style.display      = mode === 'mapa'      ? 'block' : 'none';
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
+  if (mode === 'mapa' && typeof buildMapView === 'function') {
+    if (!vMapa.dataset.built) {
+      buildMapView(vMapa);
+      vMapa.dataset.built = '1';
+    } else if (typeof refreshMapMarkers === 'function') {
+      refreshMapMarkers();
+      if (_mapaInstance) setTimeout(() => _mapaInstance.invalidateSize(), 60);
+    }
+  }
   if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
 

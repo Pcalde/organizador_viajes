@@ -6,6 +6,8 @@
 <title>Cuestionador de viajes</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="src/css/styles.css">
@@ -85,12 +87,15 @@
       <span>1. Tu Cuestionario</span>
       <span class="tab-badge" id="badge-draft" style="display:none">● Borrador</span>
     </button>
+    <button type="button" class="mode-tab" data-mode="mapa">
+      <span>2. Mapa</span>
+    </button>
     <button type="button" class="mode-tab" data-mode="consensus">
-      <span>2. Consenso y Reformulario</span>
+      <span>3. Consenso y Reformulario</span>
       <span class="tab-count" id="count-resp">0</span>
     </button>
     <button type="button" class="mode-tab" data-mode="debate">
-      <span>3. Sala de Debate</span>
+      <span>4. Sala de Debate</span>
       <span class="tab-count" id="count-debate">0</span>
     </button>
   </nav>
@@ -188,7 +193,10 @@
 
   </div><!-- /view-survey -->
 
-  <!-- ── VISTA 2: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
+  <!-- ── VISTA 2: MAPA DE DESTINOS ─────────────────────────────────────── -->
+  <div class="wide-wrap" id="view-mapa" style="display:none"></div>
+
+  <!-- ── VISTA 3: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
   <div class="wide-wrap" id="view-consensus" style="display:none">
     <div id="consensus-container" style="display:flex;flex-direction:column;gap:20px"></div>
   </div>
@@ -213,6 +221,7 @@
 <script src="src/js/forms.js"></script>
 <script src="src/js/answers.js"></script>
 <script src="src/js/reformulario.js"></script>
+<script src="src/js/mapa.js"></script>
 <script src="src/js/debate.js"></script>
 <script src="src/js/polling.js"></script>
 <script src="src/js/auth.js"></script>
