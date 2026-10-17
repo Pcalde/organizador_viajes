@@ -22,6 +22,88 @@ function pcParts() {
 
 // Controles de edición y borrado para cualquier opción
 // ── EDITOR VISUAL INLINE Y BORRADO DE OPCIONES (Sin prompt/confirm) ─────────
+// Franja de la última respuesta propia (para no perderla al repintar el formulario)
+var lastHorariosRange = null;
+
+function addGeoFieldsToDrawer(drawer, rawOp) {
+  const geoHost = div('opt-edit-field');
+  geoHost.style.cssText = 'flex:2;min-width:200px';
+  geoHost.innerHTML = `
+    <label>📍 Destino para el mapa</label>
+    <input type="text" class="inp-eo-geo" value="${esc(rawOp.geo || '')}" placeholder="Calle, ciudad o coordenadas «40.4168,-3.7038»">
+    <div class="geo-preview" style="display:none"></div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button type="button" class="btn-pc btn-geo-search">🔎 Buscar en el mapa</button>
+      <span class="geo-status" style="font-size:0.75rem;color:var(--muted);align-self:center"></span>
+    </div>
+  `;
+  drawer.querySelector('.opt-edit-grid').appendChild(geoHost);
+
+  const inpGeo = geoHost.querySelector('.inp-eo-geo');
+  const prev   = geoHost.querySelector('.geo-preview');
+  const status = geoHost.querySelector('.geo-status');
+  let lastCoords = null;
+
+  const showPrev = c => {
+    lastCoords = c;
+    prev.style.display = 'block';
+    prev.innerHTML = `<b>${fmtKm(haversineKm(puntoPartida(), c))}</b> desde el punto de partida · ` +
+      `<a href="https://www.openstreetmap.org/?mlat=${c.lat}&mlon=${c.lng}#map=15/${c.lat}/${c.lng}" target="_blank" rel="noopener">${c.lat.toFixed(4)}, ${c.lng.toFixed(4)} ↗</a>`;
+  };
+  const hidePrev = () => { lastCoords = null; prev.style.display = 'none'; };
+
+  // Autodetección: texto "lat,lng" sin necesidad de buscar
+  inpGeo.addEventListener('input', () => {
+    const c = parseCoordStr(inpGeo.value);
+    if (c) showPrev(c); else hidePrev();
+  });
+
+  const doSearch = async () => {
+    const q = inpGeo.value.trim();
+    if (!q) { status.textContent = 'Escribe algo que buscar'; return; }
+    if (typeof L === 'undefined') { status.textContent = 'Mapa no disponible (Leaflet)'; return; }
+    status.textContent = 'Buscando…';
+    try {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), {
+        headers: { 'Accept-Language': 'es' },
+      });
+      const arr = await res.json();
+      if (arr && arr.length) {
+        const c = { lat: parseFloat(arr[0].lat), lng: parseFloat(arr[0].lon) };
+        inpGeo.value = arr[0].display_name;
+        showPrev(c);
+        status.textContent = '✓ Encontrado';
+      } else {
+        status.textContent = '✗ Sin resultados';
+      }
+    } catch (e) {
+      status.textContent = '✗ Error de red';
+    }
+  };
+  geoHost.querySelector('.btn-geo-search').addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    doSearch();
+  });
+
+  // Al guardar: si hay coordenadas válidas se envían como objeto {texto, lat, lng}
+  const getGeo = () => {
+    if (lastCoords) return Object.assign({ texto: inpGeo.value.trim() }, lastCoords);
+    const c = parseCoordStr(inpGeo.value);
+    if (c) return Object.assign({ texto: inpGeo.value.trim() }, c);
+    const t = inpGeo.value.trim();
+    return t ? { texto: t } : null;
+  };
+  return { getGeo, hidePrev };
+}
+
+// Muestra una opción enriquecida ({nombre, precio, geo}) como texto plano editable.
+// El valor de un input <input> debe ser string; si no, [object Object] corrompería la clave.
+function genOptLabel(rawOp) {
+  if (rawOp && typeof rawOp === 'object') return String(rawOp.nombre || '');
+  const s = String(rawOp);
+  return s.includes('|') ? s.split('|').slice(1).join('|') : s;
+}
+
 function createOptionCrudControls(item, q, rawOp) {
   const qid    = q.id;
   const isCasa = q.tipo === 'casas';
@@ -34,7 +116,7 @@ function createOptionCrudControls(item, q, rawOp) {
   const radKey   = hasPipe ? rawStr.split('|')[0] : '';
   const curLabel = isCasa
     ? (rawOp.nombre || '')
-    : (hasPipe ? rawStr.split('|').slice(1).join('|') : String(rawOp));
+    : (hasPipe ? rawStr.split('|').slice(1).join('|') : genOptLabel(rawOp));
 
   const wrap  = div('opt-crud-btns');
   const bEdit = document.createElement('button');
@@ -50,6 +132,7 @@ function createOptionCrudControls(item, q, rawOp) {
   const openEditView = () => {
     drawer.style.display = 'flex';
     drawer.className = 'opt-edit-drawer mode-edit';
+    let geoCtl = null;
     if (isCasa) {
       drawer.innerHTML = `
         <div class="opt-edit-grid">
@@ -75,14 +158,20 @@ function createOptionCrudControls(item, q, rawOp) {
           <button type="button" class="btn-propose btn-eo-save">Guardar cambios</button>
         </div>
       `;
+      geoCtl = addGeoFieldsToDrawer(drawer, rawOp);
     } else {
+      // Opciones de cualquier otro tipo (checkbox, voto ponderado, radio):
+      // ahora también admiten precio y destino geolocalizable para el mapa.
       drawer.innerHTML = `
         <div class="opt-edit-single">
           <input type="text" class="inp-eo-text" value="${esc(curLabel)}" placeholder="Texto de la opción…">
+          <input type="text" class="inp-eo-precio-gen" value="${esc((rawOp && typeof rawOp === 'object' && rawOp.precio) || '')}" placeholder="Precio opcional (Ej. 450 €)" style="max-width:170px">
           <button type="button" class="btn-pc btn-eo-cancel">Cancelar</button>
           <button type="button" class="btn-propose btn-eo-save">Guardar</button>
         </div>
+        <div class="opt-edit-grid opt-edit-grid-gen"></div>
       `;
+      geoCtl = addGeoFieldsToDrawer({ querySelector: s => s === '.opt-edit-grid' ? drawer.querySelector('.opt-edit-grid-gen') : null }, rawOp);
     }
 
     const firstInp = drawer.querySelector('input');
@@ -103,12 +192,26 @@ function createOptionCrudControls(item, q, rawOp) {
         const foto   = safeUrl(drawer.querySelector('.inp-eo-foto').value);
         if (!nombre) { drawer.querySelector('.inp-eo-nombre').focus(); return; }
         nuevaOpcion = { nombre, precio, url, foto };
+        const geo = geoCtl && geoCtl.getGeo();
+        if (geo) nuevaOpcion.geo = geo;
         newKey = nombre;
       } else {
         const txt = drawer.querySelector('.inp-eo-text').value.trim();
         if (!txt) { drawer.querySelector('.inp-eo-text').focus(); return; }
-        nuevaOpcion = hasPipe ? `${radKey}|${txt}` : txt;
-        newKey = hasPipe ? radKey : txt;
+        const precio = drawer.querySelector('.inp-eo-precio-gen').value.trim();
+        const geo = geoCtl && geoCtl.getGeo();
+        if (precio || geo) {
+          // Opción enriquecida: se guarda como objeto (la clave sigue siendo el texto)
+          nuevaOpcion = { nombre: txt, precio };
+          if (geo) nuevaOpcion.geo = geo;
+          newKey = txt;
+        } else if (hasPipe) {
+          nuevaOpcion = `${radKey}|${txt}`;
+          newKey = radKey;
+        } else {
+          nuevaOpcion = txt;
+          newKey = txt;
+        }
       }
 
       saveBtn.disabled = true;
@@ -242,6 +345,20 @@ function createOptItem(q, rawOp) {
   const chk = document.createElement('span');  chk.className = 'check';
   const txt = document.createElement('span');  txt.style.flex = '1'; txt.textContent = val;
   lbl.append(inp, chk, txt);
+
+  // Precio y distancia al punto de partida (si la opción tiene coordenadas)
+  if (rawOp && typeof rawOp === 'object' && rawOp.precio) {
+    const precio = document.createElement('span');
+    precio.className = 'casa-precio'; precio.textContent = rawOp.precio;
+    lbl.appendChild(precio);
+  }
+  const km = optKmFromSchema(rawOp);
+  if (km != null) {
+    const dist = document.createElement('span');
+    dist.className = 'opt-dist'; dist.title = 'Distancia al punto de partida común';
+    dist.textContent = fmtKm(km);
+    lbl.appendChild(dist);
+  }
   inp.addEventListener('change', triggerSave);
 
   const crud = createOptionCrudControls(item, qObj, rawOp);
@@ -322,6 +439,13 @@ function createCasaItem(q, op, n) {
 
   const precio = document.createElement('span');
   precio.className = 'casa-precio'; precio.textContent = op.precio || '';
+  const kmCasa = optKmFromSchema(op);
+  if (kmCasa != null) {
+    const dist = document.createElement('span');
+    dist.className = 'opt-dist'; dist.title = 'Distancia al punto de partida común';
+    dist.textContent = fmtKm(kmCasa);
+    row.appendChild(dist);
+  }
   const foto = safeUrl(op.foto);
   let thumb = null;
   if (foto) {
@@ -423,6 +547,72 @@ function addDateRange(card, desde = null, hasta = null) {
   row.querySelector('.btn-remove').addEventListener('click', () => { row.remove(); triggerSave(); });
   row.querySelectorAll('input').forEach(i => i.addEventListener('change', triggerSave));
   list.appendChild(row);
+}
+
+// ── PUNTO DE PARTIDA COMÚN Y DISTANCIAS ─────────────────────────────────────
+// El grupo comparte un único punto de partida (editable, se recuerda en el
+// navegador). A partir de las coordenadas de cada opción se calcula la
+// distancia ortodrómica (haversine) mostrada en listas y mapa.
+var LS_PARTIDA = 'viajes:partida';
+
+function parseCoordStr(s) {
+  const m = String(s || '').trim().match(/^(-?\d{1,2}(?:[.,]\d+)?)[\s,]+(-?\d{1,3}(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  const lat = parseFloat(m[1].replace(',', '.'));
+  const lng = parseFloat(m[2].replace(',', '.'));
+  if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+function geoDeOp(op) {
+  if (!op || typeof op !== 'object' || !op.geo) return null;
+  const g = op.geo;
+  if (typeof g === 'string') return parseCoordStr(g);
+  const lat = Number(g.lat), lng = Number(g.lng);
+  if (isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0)) {
+    return { lat, lng };
+  }
+  return null;
+}
+
+function haversineKm(a, b) {
+  if (!a || !b) return null;
+  const R = 6371, rad = d => d * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function fmtKm(km) {
+  if (km == null || !isFinite(km)) return '';
+  return km >= 100 ? Math.round(km) + ' km' : (Math.round(km * 10) / 10) + ' km';
+}
+
+function puntoPartida() {
+  try {
+    const raw = localStorage.getItem(LS_PARTIDA);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && isFinite(p.lat) && isFinite(p.lng)) return p;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function setPuntoPartida(p) {
+  try {
+    if (p) localStorage.setItem(LS_PARTIDA, JSON.stringify(p));
+    else localStorage.removeItem(LS_PARTIDA);
+  } catch (e) {}
+}
+
+// Distancia de una opción del esquema al punto de partida (null si falta alguno)
+function optKmFromSchema(op) {
+  const origin = puntoPartida();
+  const dest   = geoDeOp(op);
+  if (!origin || !dest) return null;
+  return haversineKm(origin, dest);
 }
 
 const TOGGLES_DISP = [
@@ -565,6 +755,9 @@ var TIPOS = {
           const hasta = r.querySelector('.slot-to').value || desde;
           return { desde, hasta, franjas: [...r.querySelectorAll('.franja-pill.active')].map(b => b.dataset.fid) };
         }).filter(d => d.desde && d.franjas.length);
+        // Recordar la última franja propia válida: alimenta el cruce de soluciones
+        // del motor (disponibilidad ↔ horarios) aunque no se rellenen fechas.
+        if (disponibilidades.length) lastHorariosRange = disponibilidades[0];
 
         const restricciones = [...card.querySelectorAll('.restriccion-row')].map(r => {
           const fd = r.querySelector('.rest-fd').value || null;
