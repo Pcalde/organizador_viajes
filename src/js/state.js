@@ -17,9 +17,6 @@ var debate          = [];
 var serverHasV2     = true;  // Detecta si _snapshot devuelve el campo `respuestas`
 var activeMode      = 'survey';
 var draftDirty      = false;
-// Asistente del cuestionario (wizard.js): una pregunta por tarjeta + navegación
-var surveyWizardMode = false; // se inicializa desde localStorage al arrancar
-var wizIndex         = 0;     // sección activa mientras se responde
 var weightByProb    = true;
 var lastRaw         = '';
 var saveTimer       = null;
