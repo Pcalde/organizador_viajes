@@ -105,6 +105,37 @@ async function submitNewCasa(q, casa) {
 }
 
 // ── NUEVA PREGUNTA ──────────────────────────────────────────────────────────
+// Desplegable «Sección» del formulario de pregunta nueva. Las opciones son las
+// secciones existentes (marcas + nombres usados por preguntas sueltas); la
+// última entrada permite crear una sección nueva escribiendo su nombre.
+const AQ_SEC_NUEVA = '__nueva__';
+function rebindAddQSeccion() {
+  const sel = $('add-q-seccion');
+  if (!sel) return;
+  const nombres = (typeof nombresDeSecciones === 'function') ? nombresDeSecciones() : [];
+  sel.innerHTML = '<option value="">Sin sección (aparece suelta en el raíl)</option>' +
+    nombres.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+    `<option value="${AQ_SEC_NUEVA}">＋ Crear sección nueva…</option>`;
+  const inp = $('add-q-seccion-nombre');
+  if (inp) inp.value = '';
+  syncAddQSeccionField();
+}
+
+function syncAddQSeccionField() {
+  const sel = $('add-q-seccion'), inp = $('add-q-seccion-nombre');
+  if (!sel || !inp) return;
+  inp.style.display = sel.value === AQ_SEC_NUEVA ? '' : 'none';
+  if (sel.value !== AQ_SEC_NUEVA) inp.value = '';
+}
+
+// Nombre de sección elegido en el formulario ('' = sin sección).
+function aqSeccionElegida() {
+  const sel = $('add-q-seccion');
+  if (!sel) return '';
+  if (sel.value === AQ_SEC_NUEVA) return ($('add-q-seccion-nombre').value || '').trim();
+  return sel.value;
+}
+
 function resetAddQuestionForm() {
   $('add-q-label').value = '';
   const cont = $('add-q-opts-container');
@@ -113,6 +144,7 @@ function resetAddQuestionForm() {
   aqGetFranjas = buildFranjasEditor($('aq-franjas-host'), FRANJAS_HORARIAS);
   $('aq-dur').value = 3;
   $('add-q-desc').value = '';
+  rebindAddQSeccion(); // desplegable de secciones al día
   rebindAddQCond(); // editor de condición limpio (sobre el esquema actual)
 }
 
@@ -175,11 +207,37 @@ async function submitNewQuestion() {
   }
 
   const pregunta = { id, tipo, label, opciones, config };
+  // Sección elegida en el desplegable (o nombre nuevo escrito a mano). La
+  // tarjeta «marca» de una sección nueva se crea aquí mismo si no existe.
+  const secElegida = aqSeccionElegida();
+  if (secElegida) {
+    config.seccion = secElegida;
+    if (typeof secHeaderPara === 'function' && !secHeaderPara(secElegida) &&
+        typeof crearSeccion === 'function') {
+      crearSeccion(secElegida);   // fire-and-forget: pollOnce traerá la marca
+    }
+  }
 
-  // Optimista, con rollback
+  // Optimista, con rollback. Insertar AL FINAL del esquema, pero justo después
+  // de la última tarjeta visible de su sección (si la tiene), para que DOM y
+  // esquema coincidan hasta que llegue el orden definitivo del servidor.
   schema.push(pregunta);
   const card = buildQuestionCard(pregunta, schema.length - 1);
-  if (card) $('questions-container').appendChild(card);
+  const contQ = $('questions-container');
+  if (card && contQ) {
+    let beforeEl = null;
+    if (secElegida) {
+      for (let j = schema.length - 2; j >= 0; j--) {
+        const x = schema[j];
+        if (!x.config || x.config.esEncabezado) continue;
+        if (String(x.config.seccion || '').trim().toLowerCase() !==
+            secElegida.trim().toLowerCase()) continue;
+        const c = cardFor(x.id);
+        if (c && c.parentElement === contQ) { beforeEl = c; break; }
+      }
+    }
+    if (beforeEl) beforeEl.after(card); else contQ.appendChild(card);
+  }
   $('add-q-form').classList.remove('open');
   resetAddQuestionForm();
   // La sección nueva entra en el raíl/barra (y si es condicional, visible ya).
@@ -204,10 +262,14 @@ function bindForms() {
     const f = $('add-q-form');
     const opening = !f.classList.contains('open');
     f.classList.toggle('open');
-    // Al abrir, el editor de condición se pinta con el esquema actual.
-    if (opening) rebindAddQCond();
+    // Al abrir, el desplegable de secciones y el editor de condición se
+    // pintan con el esquema actual.
+    if (opening) { rebindAddQSeccion(); rebindAddQCond(); }
   });
   $('btn-submit-new-q').addEventListener('click', submitNewQuestion);
+
+  const aqSecSel = $('add-q-seccion');
+  if (aqSecSel) aqSecSel.addEventListener('change', syncAddQSeccionField);
 
   $('add-q-tipo').addEventListener('change', function () {
     const v = this.value;

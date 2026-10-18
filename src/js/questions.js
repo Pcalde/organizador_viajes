@@ -9,9 +9,28 @@ function findItem(root, val) {
   return [...root.querySelectorAll('[data-val]')].find(e => e.dataset.val === val) || null;
 }
 
+// Tarjeta «marca» de sección (textarea con config.esEncabezado): se pinta
+// como un encabezado decorativo, sin controles de respuesta ni edición.
+function secIsHeaderCard(q) {
+  return !!(q && q.config && q.config.esEncabezado && q.tipo === 'textarea');
+}
+
+function buildSectionHeaderCard(q, idx) {
+  const card = document.createElement('div');
+  card.className = 'card sec-section-header';
+  card.dataset.qid = q.id;
+  card.state = {};
+  card.dataset.cfg = JSON.stringify(q.config || {});
+  const num = String(idx + 1).padStart(2, '0');
+  card.innerHTML = `<div class="sec-section-title"><span class="sec-section-num">${num}</span>` +
+    `<span class="q-label-text">${esc(q.label)}</span></div>`;
+  return card;
+}
+
 function buildQuestionCard(q, idx) {
   const type = TIPOS[q.tipo];
   if (!type) return null;
+  if (secIsHeaderCard(q)) return buildSectionHeaderCard(q, idx);
 
   const card = document.createElement('div');
   card.className = 'card';
@@ -70,6 +89,20 @@ function buildQuestionCard(q, idx) {
       ` : ''}
       <label style="font-size:0.78rem;color:var(--muted)">Descripción / texto explicativo (opcional)</label>
         <textarea class="inp-edit-q-desc" rows="2" maxlength="500" placeholder="Texto que verá el grupo bajo el título">${esc(cfg.descripcion || '')}</textarea>
+      ${(() => {
+        // Selector de sección: agrupa esta pregunta en una existente o crea
+        // una nueva al escribir un nombre nuevo (se persiste en config.seccion
+        // vía edit_pregunta, que acepta config libre).
+        const nombres = (typeof nombresDeSecciones === 'function' ? nombresDeSecciones() : []);
+        const actual = String(cfg.seccion || '');
+        const opts = ['<option value="">Sin sección (aparece suelta en el raíl)</option>']
+          .concat(nombres.map(n => `<option value="${esc(n)}"${n === actual ? ' selected' : ''}>${esc(n)}</option>`));
+        if (actual && !nombres.includes(actual))
+          opts.push(`<option value="${esc(actual)}" selected>${esc(actual)} (nueva)</option>`);
+        return `<label style="font-size:0.78rem;color:var(--muted)">Sección (agrupa esta pregunta en el raíl)</label>
+          <select class="inp-eq-seccion">${opts.join('')}</select>
+          <input type="text" class="inp-eq-seccion-nombre" maxlength="60" placeholder="Nombre de la sección nueva…" style="display:none">`;
+      })()}
       ${q.tipo !== 'textarea' ? '<div class="cond-editor-host q-cond-host"></div>' : ''}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" class="btn-pc btn-cancel-eq">Cancelar</button>
@@ -78,6 +111,22 @@ function buildQuestionCard(q, idx) {
     </div>
   `;
   card.appendChild(editBox);
+  // El desplegable de sección muestra un campo de texto para crear una nueva.
+  const selSec = editBox.querySelector('.inp-eq-seccion');
+  const inpSec = editBox.querySelector('.inp-eq-seccion-nombre');
+  if (selSec && inpSec) {
+    const __newVal = '__nueva__';
+    const optNueva = document.createElement('option');
+    optNueva.value = __newVal;
+    optNueva.textContent = '＋ Crear sección nueva…';
+    selSec.appendChild(optNueva);
+    const syncSecField = () => {
+      inpSec.style.display = selSec.value === __newVal ? '' : 'none';
+      if (selSec.value !== __newVal) inpSec.value = '';
+    };
+    selSec.addEventListener('change', syncSecField);
+    syncSecField();
+  }
   let getFr = null;
   if (q.tipo === 'horarios') getFr = buildFranjasEditor(editBox.querySelector('.eq-franjas-host'), getFranjas(q));
   // Editor de la condición «mostrar solo si…» (secciones.js): pregunta previa
@@ -119,6 +168,20 @@ function buildQuestionCard(q, idx) {
       newCfg.duracionIdeal = Math.max(1, Math.min(12, Number(editBox.querySelector('.inp-eq-dur').value) || 3));
     }
     newCfg.descripcion = editBox.querySelector('.inp-edit-q-desc').value.trim();
+    // Sección elegida en el desplegable (o nombre nuevo escrito a mano). Si
+    // la sección nueva no tiene todavía tarjeta «marca», se crea aquí mismo.
+    let secCambiada = false;
+    if (selSec) {
+      const secSel = selSec.value === '__nueva__' ? (inpSec.value || '').trim() : selSec.value;
+      const actual = String((q.config && q.config.seccion) || '');
+      if (secSel !== actual) {
+        secCambiada = true;
+        if (secSel) newCfg.seccion = secSel; else delete newCfg.seccion;
+        if (secSel && typeof secHeaderPara === 'function' && !secHeaderPara(secSel)) {
+          crearSeccion(secSel);   // fire-and-forget: pollOnce traerá la marca
+        }
+      }
+    }
     // Condición de visibilidad: solo sobre preguntas ANTERIORES en el orden
     // (regla anti-ciclos, validada también aquí y al reordenar).
     if (getCond) {
@@ -143,8 +206,12 @@ function buildQuestionCard(q, idx) {
       renderAllQuestions();
       restoreDraft();
       // El raíl y las condiciones pueden haber cambiado (nuevo mostrarSi,
-      // título de la fuente, etc.). Se difiere: restoreDraft marca cambios.
+      // título de la fuente, sección…). Al cambiar de sección, además, el
+      // usuario viaja a la sección destino para ver el resultado.
       if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
+      if (secCambiada && typeof goToSectionDeNombre === 'function') {
+        setTimeout(() => goToSectionDeNombre(newCfg.seccion || ''), 0);
+      }
       showStatus('Pregunta actualizada', 'ok', 2500);
       pollOnce();
     } catch (e) {
@@ -266,10 +333,23 @@ function syncSchemaToDOM() {
     const card = cardFor(q.id);
     if (!card) {
       const nueva = buildQuestionCard(q, idx);
-      if (nueva) container.appendChild(nueva);
+      // Insertar en la posición del esquema (no al final): así el DOM sigue
+      // el orden real cuando llegan tarjetas de otros usuarios vía polling.
+      if (nueva) {
+        const nextQ = schema[idx + 1];
+        const nextEl = nextQ ? cardFor(nextQ.id) : null;
+        if (nextEl && nextEl.parentElement === container) nextEl.before(nueva);
+        else container.appendChild(nueva);
+      }
       return;
     }
-      if (q.tipo === 'horarios' && card.dataset.cfg !== JSON.stringify(q.config || {})) {
+    // Si la tarjeta cambió a «marca» de sección (o viceversa), se reconstruye.
+    if (secIsHeaderCard(q) !== !!card.querySelector('.sec-section-title')) {
+      const nueva = buildQuestionCard(q, idx);
+      if (nueva) card.replaceWith(nueva);
+      return;
+    }
+    if (q.tipo === 'horarios' && card.dataset.cfg !== JSON.stringify(q.config || {})) {
       const prev  = TIPOS.horarios.read(card, q);
       const nueva = buildQuestionCard(q, idx);
       if (nueva) { card.replaceWith(nueva); TIPOS.horarios.write(nueva, q, prev); }
@@ -299,7 +379,8 @@ function syncSchemaToDOM() {
       if (!validOptVals.has(el.dataset.val)) el.remove();
     });
 
-    // Añadir opciones nuevas
+    // Añadir opciones nuevas (op puede ser objeto enriquecido {nombre, geo…};
+    // addOption lo acepta tal cual y preserva los datos extra)
     (q.opciones || []).forEach(op => {
       if (!findItem(card, optVal(q, op))) type.addOption(card, q, op, false);
     });

@@ -112,37 +112,43 @@ function hydrateFromServerIfNoDraft() {
   setDraftDirty(false);
 }
 
-// Genera el payload: guarda el mapa uniforme `values` y mantiene las propiedades legacy.
+// Genera el payload: un mapa uniforme `values` indexado por id de pregunta.
+// Ya no hay IDs anclados ni propiedades legacy (opciones/casas/precio…): las
+// respuestas de preguntas creadas con los nombres viejos ('casas', 'precio',
+// 'transporte', 'disponibilidad') se reubican bajo su id real para que la
+// vista SQL `respuestas_planas` (que lee values.<id> con fallback legacy) y
+// buildModelData funcionen con encuestas nuevas y antiguas por igual.
 // Las preguntas OCULTAS por condición (config.mostrarSi) se conservan en el
 // borrador local pero se EXCLUYEN del envío: si no, buildModelData las contaría.
+function _legacyKeyDe(q) {
+  if (!q || typeof q.id !== 'string') return null;
+  if (/^(opciones-destino|casas|precio|transporte|disponibilidad)$/.test(q.id)) return q.id;
+  if (/^(plan|aloj|presu|trans|cuand|notas)_/.test(q.id)) {
+    return { plan: 'opciones-destino', aloj: 'casas', presu: 'precio',
+             trans: 'transporte', cuand: 'disponibilidad', notas: null }[q.id.slice(0, q.id.indexOf('_'))];
+  }
+  return null;
+}
+
 function collectAnswers() {
   const st = readState();
   const result = {
     timestamp: new Date().toISOString(),
     values: {},
-    opciones: [],
-    casas: [],
-    extras: {},
   };
 
   schema.forEach(q => {
     // Visibilidad evaluada sobre el propio borrador recién leído (sin caché).
     if (typeof esVisible === 'function' && !esVisible(q, st.answers)) return;
-    const v = st.answers[q.id];
-    result.values[q.id] = v;
-    if (v == null) return;
-    switch (q.id) {
-      case 'opciones-destino': result.opciones    = v; break;
-      case 'casas':            result.casas       = v; break;
-      case 'precio':           result.precioMaxPP = v; break;
-      case 'transporte':       result.transporte  = v; break;
-      case 'disponibilidad':
-        result.diasMax = v.diasMax;
-        result.disponibilidad = { soloFinde: v.soloFinde, meDaIgual: v.meDaIgual, preferirPuente: v.preferirPuente };
-        result.rangosFechas = v.rangos;
-        break;
-      default: result.extras[q.id] = v;
+    let v = st.answers[q.id];
+    // Compatibilidad con borradores/encuestas antiguos: si no hay nada bajo el
+    // id actual, probar la clave legacy equivalente.
+    if (v == null) {
+      const lk = _legacyKeyDe(q);
+      if (lk) v = st.answers[lk];
     }
+    if (v == null) return;
+    result.values[q.id] = v;
   });
 
   if (st.ausencias_predichas) {

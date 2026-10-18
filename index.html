@@ -193,6 +193,13 @@
             <label>Texto de la pregunta</label>
             <input type="text" id="add-q-label" placeholder="p.ej. ¿Qué aspectos son imprescindibles?">
           </div>
+          <!-- Sección: el desplegable lo rellena forms.js con nombresDeSecciones() -->
+          <div class="add-q-field" id="add-q-seccion-wrap">
+            <label>Sección (agrupa esta pregunta en el raíl)</label>
+            <select id="add-q-seccion"></select>
+            <input type="text" id="add-q-seccion-nombre" maxlength="60"
+                   placeholder="Nombre de la sección nueva…" style="display:none;margin-top:6px">
+          </div>
           <div id="add-q-opciones-wrap" class="add-q-field">
             <label>Opciones iniciales</label>
             <div class="add-q-opts-container" id="add-q-opts-container">

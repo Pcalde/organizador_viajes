@@ -165,10 +165,10 @@ function addDaysISO(iso, n) {
 // ── 2. NORMALIZACIÓN Y MATRIZ DE DISPONIBILIDAD (Port de datos.py) ──────────
 function buildModelData() {
   const qDisp  = schema.find(q => q.tipo === 'disponibilidad');
-  const qTrans = schema.find(q => getRadioStepperConfig(q)) || schema.find(q => q.id === 'transporte');
-  const qPrec  = schema.find(q => q.id === 'precio' || q.tipo === 'slider');
+  const qTrans = schema.find(q => getRadioStepperConfig(q));
+  const qPrec  = schema.find(q => q.tipo === 'slider');
   const qCasas = schema.find(q => q.tipo === 'casas');
-  const qOpts  = schema.find(q => q.id === 'opciones-destino' || q.tipo === 'checkbox' || q.tipo === 'voto-ponderado');
+  const qOpts  = schema.find(q => q.tipo === 'checkbox' || q.tipo === 'voto-ponderado');
   const qHor = schema.find(q => q.tipo === 'horarios');
 
   const viajeros = [];
@@ -1510,7 +1510,7 @@ function buildOptionsConsensus(card, q, myVal) {
 function buildSliderConsensus(card, q, myVal) {
   const cfg  = q.config || {};
   const min  = cfg.min ?? 10, max = cfg.max ?? 500, step = cfg.step ?? 10;
-  const unit = cfg.unit ?? (q.id === 'precio' ? ' €' : '');
+  const unit = cfg.unit ?? (/^(precio|presu)_/.test(q.id) ? ' €' : '');
 
   const entries = [];
   respuestas.forEach(r => {
