@@ -19,11 +19,16 @@ function openAccountModal() {
   $('acc-partida').value = '';
   accountStatus('', 'ok');
   backdrop.hidden = false;
+  backdrop.style.removeProperty('display');   // deshace el cierre forzado
 }
 
 function closeAccountModal() {
   const backdrop = $('account-modal-backdrop');
-  if (backdrop) backdrop.hidden = true;
+  if (backdrop) {
+    backdrop.hidden = true;
+    // Igual que en el modal del mapa: garantizamos que no quede tapando la página.
+    backdrop.style.setProperty('display', 'none', 'important');
+  }
 }
 
 function accountStatus(msg, kind) {

@@ -49,11 +49,32 @@ function toggleSideNav() {
 // ── MODAL DEL MAPA (ya no es una pestaña global: se abre desde el botón 🗺️) ──
 let _mapModalBuilt = false;
 
+function closeMapModal() {
+  const backdrop = $('map-modal-backdrop');
+  if (backdrop) {
+    backdrop.hidden = true;
+    // Garantiza que quede invisible/inerte aunque algún CSS le dé display.
+    backdrop.style.setProperty('display', 'none', 'important');
+  }
+  document.body.classList.remove('map-modal-open');
+}
+
+// Asegura que ningún modal quede abierto de arranque (si algo rompiera JS y
+// no se ejecutara el cierre, la página quedaría tapada e inaccesible).
+function ensureModalsClosed() {
+  ['map-modal-backdrop', 'account-modal-backdrop'].forEach(id => {
+    const bd = $(id);
+    if (bd && bd.hidden) bd.style.setProperty('display', 'none', 'important');
+  });
+  document.body.classList.remove('map-modal-open');
+}
+
 function openMapModal() {
   const backdrop = $('map-modal-backdrop');
   const body     = $('map-modal-body');
   if (!backdrop || !body) return;
   backdrop.hidden = false;
+  backdrop.style.removeProperty('display');   // deshace el cierre forzado
   document.body.classList.add('map-modal-open');
   if (!_mapModalBuilt && typeof buildMapView === 'function') {
     buildMapView(body);
@@ -62,12 +83,6 @@ function openMapModal() {
     refreshMapMarkers();
   }
   if (_mapaInstance) setTimeout(() => _mapaInstance.invalidateSize(), 80);
-}
-
-function closeMapModal() {
-  const backdrop = $('map-modal-backdrop');
-  if (backdrop) backdrop.hidden = true;
-  document.body.classList.remove('map-modal-open');
 }
 
 function bindMapModal() {
@@ -184,6 +199,7 @@ function bindNavigation() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  ensureModalsClosed();   // si algo falla al arrancar, la página no queda tapada
   bindAuth();
   bindCreateTripUI();
   bindForms();

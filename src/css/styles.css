@@ -1,6 +1,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 button, label, a, input, textarea, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
+/* Seguridad: cualquier elemento con el atributo hidden debe quedar invisible e
+   inerte. Sin esto, un modal marcado con hidden pero cuyo CSS le da display
+   (p. ej. flex) seguiría tapando toda la página y bloquearía la interfaz. */
+[hidden] { display: none !important; }
+
 :root {
   --bg:     #f5f0e8;
   --card:   #fffdf8;
