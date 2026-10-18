@@ -90,6 +90,10 @@ function applyPollUpdate(data) {
   if ((schemaChanged || respChanged || pcChanged) && typeof renderReformulario === 'function') {
     renderReformulario();
   }
+  // Estadísticas por sección dentro del propio cuestionario (wizard.js)
+  if ((schemaChanged || respChanged || pcChanged) && typeof scheduleRefreshSections === 'function') {
+    scheduleRefreshSections();
+  }
   if ((debateChanged || pcChanged || schemaChanged) && typeof renderDebate === 'function') {
     renderDebate();
   }

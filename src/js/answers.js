@@ -184,13 +184,18 @@ async function enviarRespuesta(silent = false) {
   }
 }
 
-// Usado por el Reformulario: modifica una pregunta desde la vista de consenso y sincroniza
+// Envolvente del botón de envío: el original no guardaba el borrador ni
+// marcaba cambios, por lo que el reformulario interactivo nunca sincronizaba.
 function patchSingleAnswer(qid, newVal) {
   const q = schema.find(x => x.id === qid);
   const card = cardFor(qid);
   if (!q || !card || !TIPOS[q.tipo]) return;
 
   TIPOS[q.tipo].write(card, q, newVal);
+
+  // El cambio se refleja en las estadísticas del grupo y queda pendiente de envío
+  setDraftDirty(true);
+  saveDraft();
 
   // Actualizar memoria inmediatamente para re-renderizar gráficas sin lag
   const answers = collectAnswers();
@@ -200,6 +205,7 @@ function patchSingleAnswer(qid, newVal) {
   else respuestas.push(entry);
 
   if (typeof renderReformulario === 'function') renderReformulario();
+  if (typeof scheduleRefreshSections === 'function') scheduleRefreshSections();
 
   clearTimeout(patchTimer);
   patchTimer = setTimeout(() => enviarRespuesta(true), 500);

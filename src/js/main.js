@@ -3,7 +3,10 @@
 function switchMode(mode) {
   activeMode = mode;
 
-  document.querySelectorAll('#mode-tabs .mode-tab').forEach(btn => {
+  // Las pestañas viven dentro del menú lateral (#side-menu). El selector
+  // antiguo #mode-tabs ya no existía, por lo que el cambio de pestaña no
+  // enlazaba con ningún botón.
+  document.querySelectorAll('#side-menu .mode-tab[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
 
@@ -14,6 +17,13 @@ function switchMode(mode) {
   if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
+
+  // La barra flotante de envío solo acompaña en la vista del cuestionario
+  const fab = $('submit-fab');
+  if (fab) fab.classList.toggle('visible', mode === 'survey');
+
+  if (typeof applyWizardPaging === 'function') applyWizardPaging();
+  if (typeof updateWizNav === 'function')      updateWizNav();
 
   if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
@@ -173,7 +183,9 @@ function bindCreateTripUI() {
 }
 
 function bindNavigation() {
-  document.querySelectorAll('#mode-tabs .mode-tab').forEach(btn => {
+  // Las pestañas de modo viven en el menú lateral (#side-menu), no en un
+  // contenedor #mode-tabs (selector obsoleto que dejaba la navegación muerta).
+  document.querySelectorAll('#side-menu .mode-tab[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => switchMode(btn.dataset.mode));
   });
 
@@ -200,12 +212,14 @@ function bindNavigation() {
 
 document.addEventListener('DOMContentLoaded', () => {
   ensureModalsClosed();   // si algo falla al arrancar, la página no queda tapada
+  surveyWizardMode = wizardGetFlag();
   bindAuth();
   bindCreateTripUI();
   bindForms();
   bindAusencias();
   bindSubmit();
   bindNavigation();
+  if (typeof bindWizard === 'function') bindWizard();
   if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_KEY.startsWith('TU_CLAVE')) {
     showLoginErr('Falta configurar js/config.js (SUPABASE_URL y SUPABASE_KEY).');
     return;
