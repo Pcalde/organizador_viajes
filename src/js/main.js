@@ -1,4 +1,4 @@
-// ── NAVEGACIÓN DE MODOS, CREACIÓN DE ENCUESTA Y ARRANQUE (js/main.js) ───────
+// ── NAVEGACIÓN LATERAL DESPLEGABLE, MODAL DE MAPA Y ARRANQUE (js/main.js) ───
 
 function switchMode(mode) {
   activeMode = mode;
@@ -8,28 +8,77 @@ function switchMode(mode) {
   });
 
   const vSurvey    = $('view-survey');
-  const vMapa      = $('view-mapa');
   const vConsensus = $('view-consensus');
   const vDebate    = $('view-debate');
 
   if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
-  if (vMapa)      vMapa.style.display      = mode === 'mapa'      ? 'block' : 'none';
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
-  if (mode === 'mapa' && typeof buildMapView === 'function') {
-    if (!vMapa.dataset.built) {
-      buildMapView(vMapa);
-      vMapa.dataset.built = '1';
-    } else if (typeof refreshMapMarkers === 'function') {
-      refreshMapMarkers();
-      if (_mapaInstance) setTimeout(() => _mapaInstance.invalidateSize(), 60);
-    }
-  }
   if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
 
+  closeSideNav();
   if (pollActive) schedulePoll(currentPollBaseInterval());
+}
+
+// ── MENÚ LATERAL (hamburguesa) ───────────────────────────────────────────────
+function openSideNav() {
+  const nav = $('side-nav');
+  if (!nav) return;
+  nav.classList.add('open');
+  const bd = $('side-nav-backdrop');
+  if (bd) bd.hidden = false;
+  const tog = $('side-nav-toggle');
+  if (tog) tog.setAttribute('aria-expanded', 'true');
+}
+function closeSideNav() {
+  const nav = $('side-nav');
+  if (!nav) return;
+  nav.classList.remove('open');
+  const bd = $('side-nav-backdrop');
+  if (bd) bd.hidden = true;
+  const tog = $('side-nav-toggle');
+  if (tog) tog.setAttribute('aria-expanded', 'false');
+}
+function toggleSideNav() {
+  const nav = $('side-nav');
+  if (nav && nav.classList.contains('open')) closeSideNav(); else openSideNav();
+}
+
+// ── MODAL DEL MAPA (ya no es una pestaña global: se abre desde el botón 🗺️) ──
+let _mapModalBuilt = false;
+
+function openMapModal() {
+  const backdrop = $('map-modal-backdrop');
+  const body     = $('map-modal-body');
+  if (!backdrop || !body) return;
+  backdrop.hidden = false;
+  document.body.classList.add('map-modal-open');
+  if (!_mapModalBuilt && typeof buildMapView === 'function') {
+    buildMapView(body);
+    _mapModalBuilt = true;
+  } else if (typeof refreshMapMarkers === 'function') {
+    refreshMapMarkers();
+  }
+  if (_mapaInstance) setTimeout(() => _mapaInstance.invalidateSize(), 80);
+}
+
+function closeMapModal() {
+  const backdrop = $('map-modal-backdrop');
+  if (backdrop) backdrop.hidden = true;
+  document.body.classList.remove('map-modal-open');
+}
+
+function bindMapModal() {
+  const backdrop = $('map-modal-backdrop');
+  if (!backdrop) return;
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeMapModal(); });
+  const btnClose = $('map-modal-close');
+  if (btnClose) btnClose.addEventListener('click', closeMapModal);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeMapModal(); closeSideNav(); }
+  });
 }
 
 function bindCreateTripUI() {
@@ -105,6 +154,12 @@ function bindNavigation() {
   document.querySelectorAll('#mode-tabs .mode-tab').forEach(btn => {
     btn.addEventListener('click', () => switchMode(btn.dataset.mode));
   });
+
+  const tog = $('side-nav-toggle');
+  if (tog) tog.addEventListener('click', toggleSideNav);
+  const bd = $('side-nav-backdrop');
+  if (bd) bd.addEventListener('click', closeSideNav);
+  if (typeof bindMapModal === 'function') bindMapModal();
 
   const surveyScreen = $('survey-screen');
   if (surveyScreen) {

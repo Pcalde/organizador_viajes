@@ -81,24 +81,27 @@
     </div>
   </header>
 
-  <!-- NAVEGACIÓN DE 3 ESPACIOS -->
-  <nav class="mode-tabs" id="mode-tabs">
-    <button type="button" class="mode-tab active" data-mode="survey">
-      <span>1. Tu Cuestionario</span>
-      <span class="tab-badge" id="badge-draft" style="display:none">● Borrador</span>
+  <!-- NAVEGACIÓN LATERAL DESPLEGABLE (hamburguesa) -->
+  <div class="side-nav" id="side-nav">
+    <button type="button" class="side-nav-toggle" id="side-nav-toggle" aria-label="Abrir menú" aria-expanded="false">
+      <span class="hamburger"></span>
     </button>
-    <button type="button" class="mode-tab" data-mode="mapa">
-      <span>2. Mapa</span>
-    </button>
-    <button type="button" class="mode-tab" data-mode="consensus">
-      <span>3. Consenso y Reformulario</span>
-      <span class="tab-count" id="count-resp">0</span>
-    </button>
-    <button type="button" class="mode-tab" data-mode="debate">
-      <span>4. Sala de Debate</span>
-      <span class="tab-count" id="count-debate">0</span>
-    </button>
-  </nav>
+    <nav class="mode-tabs" id="mode-tabs" aria-label="Secciones">
+      <button type="button" class="mode-tab active" data-mode="survey">
+        <span>1. Tu Cuestionario</span>
+        <span class="tab-badge" id="badge-draft" style="display:none">● Borrador</span>
+      </button>
+      <button type="button" class="mode-tab" data-mode="consensus">
+        <span>2. Consenso y Reformulario</span>
+        <span class="tab-count" id="count-resp">0</span>
+      </button>
+      <button type="button" class="mode-tab" data-mode="debate">
+        <span>3. Sala de Debate</span>
+        <span class="tab-count" id="count-debate">0</span>
+      </button>
+    </nav>
+  </div>
+  <div class="side-nav-backdrop" id="side-nav-backdrop" hidden></div>
 
   <div id="gas-status" style="max-width:880px;margin:0 auto 18px"></div>
 
@@ -187,14 +190,21 @@
 
     <!-- BARRA PERSISTENTE DE GUARDADO / ENVÍO -->
     <div class="sticky-submit-bar">
-      <span class="sync-state" id="sticky-sync-state">Comprobando estado de tus respuestas…</span>
-      <button class="btn-generate" id="btn-generate" type="button">Enviar mi respuesta →</button>
+      <button class="btn-generate" id="btn-generate" type="button">Actualizar respuesta →</button>
     </div>
 
   </div><!-- /view-survey -->
 
-  <!-- ── VISTA 2: MAPA DE DESTINOS ─────────────────────────────────────── -->
-  <div class="wide-wrap" id="view-mapa" style="display:none"></div>
+  <!-- ── MODAL DEL MAPA (se abre desde el botón 🗺️ de las preguntas con destinos) ── -->
+  <div class="map-modal-backdrop" id="map-modal-backdrop" hidden>
+    <div class="map-modal" role="dialog" aria-modal="true" aria-label="Mapa de destinos">
+      <div class="map-modal-head">
+        <strong>🗺️ Mapa de destinos</strong>
+        <button type="button" class="map-modal-close" id="map-modal-close" aria-label="Cerrar mapa">✕</button>
+      </div>
+      <div class="map-modal-body wide-wrap" id="map-modal-body"></div>
+    </div>
+  </div>
 
   <!-- ── VISTA 3: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
   <div class="wide-wrap" id="view-consensus" style="display:none">
