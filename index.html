@@ -86,20 +86,58 @@
     <button type="button" class="side-nav-toggle" id="side-nav-toggle" aria-label="Abrir menú" aria-expanded="false">
       <span class="hamburger"></span>
     </button>
-    <nav class="mode-tabs" id="mode-tabs" aria-label="Secciones">
+    <nav class="side-menu" id="side-menu" aria-label="Secciones">
+      <div class="side-menu-brand">Cuestionador de viajes</div>
       <button type="button" class="mode-tab active" data-mode="survey">
-        <span>1. Tu Cuestionario</span>
+        <span><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i> Cuestionario</span>
         <span class="tab-badge" id="badge-draft" style="display:none">● Borrador</span>
       </button>
       <button type="button" class="mode-tab" data-mode="consensus">
-        <span>2. Consenso y Reformulario</span>
+        <span><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> Reformulario y respuestas</span>
         <span class="tab-count" id="count-resp">0</span>
       </button>
       <button type="button" class="mode-tab" data-mode="debate">
-        <span>3. Sala de Debate</span>
+        <span><i class="fa-solid fa-comments" aria-hidden="true"></i> Debate</span>
         <span class="tab-count" id="count-debate">0</span>
       </button>
+      <div class="side-menu-sep"></div>
+      <button type="button" class="mode-tab side-menu-action" id="btn-map-modal">
+        <span><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Ver mapa</span>
+      </button>
+      <button type="button" class="mode-tab side-menu-action" id="btn-account-modal">
+        <span><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Mi cuenta</span>
+      </button>
     </nav>
+  </div>
+
+  <!-- ── MODAL DE CUENTA (nombre, contraseña, punto de partida) ─────────── -->
+  <div class="map-modal-backdrop" id="account-modal-backdrop" hidden>
+    <div class="map-modal map-modal-sm" role="dialog" aria-modal="true" aria-label="Mi cuenta">
+      <div class="map-modal-head">
+        <strong><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Mi cuenta</strong>
+        <button type="button" class="map-modal-close" id="account-modal-close" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="map-modal-body account-modal-body">
+        <div class="login-field">
+          <label for="acc-nombre">Tu nombre</label>
+          <input type="text" id="acc-nombre" maxlength="40" autocomplete="name">
+        </div>
+        <div class="login-field">
+          <label for="acc-pin">Nueva contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(opcional — deja vacío para no cambiarla)</span></label>
+          <input type="password" id="acc-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="new-password">
+        </div>
+        <div class="login-field">
+          <label for="acc-partida">¿Desde dónde sales el día del viaje? <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(dirección, ciudad o «lat,lng» — se usa en el mapa para calcular distancias)</span></label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input type="text" id="acc-partida" placeholder="p.ej. Calle Mayor 1, Madrid" style="flex:1;min-width:180px">
+            <button type="button" class="btn-pc" id="acc-partida-geo" title="Usar mi ubicación actual"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div class="account-status" id="account-status"></div>
+        <button class="btn-generate" id="btn-account-save" type="button">Guardar cambios →</button>
+        <button class="btn-logout-inline" id="btn-account-logout" type="button">Cerrar sesión</button>
+      </div>
+    </div>
   </div>
   <div class="side-nav-backdrop" id="side-nav-backdrop" hidden></div>
 
@@ -188,8 +226,8 @@
       </div>
     </div>
 
-    <!-- BARRA PERSISTENTE DE GUARDADO / ENVÍO -->
-    <div class="sticky-submit-bar">
+    <!-- BOTÓN DE ENVÍO (sin barra negra: el estado va dentro del propio botón) -->
+    <div class="submit-row">
       <button class="btn-generate" id="btn-generate" type="button">Actualizar respuesta →</button>
     </div>
 
@@ -232,6 +270,7 @@
 <script src="src/js/answers.js"></script>
 <script src="src/js/reformulario.js"></script>
 <script src="src/js/mapa.js"></script>
+<script src="src/js/cuenta.js"></script>
 <script src="src/js/debate.js"></script>
 <script src="src/js/polling.js"></script>
 <script src="src/js/auth.js"></script>

@@ -23,6 +23,7 @@ const RPC = {
   delete_proscontra: { fn: 'delete_proscontra', args: b => ({ ...ident(b), p_id: b.id }) },
   vote_proscontra:   { fn: 'vote_proscontra',   args: b => ({ ...ident(b), p_id: b.id, p_voto: b.voto }) },
   reordenar_preguntas: { fn: 'reordenar_preguntas', args: b => ({ ...ident(b), p_ids: b.ids }) },
+  update_profile:    { fn: 'update_profile',    args: b => ({ ...ident(b), p_nuevo_nombre: b.nuevoNombre || null, p_nuevo_pin: b.nuevoPinHash || null }) },
 };
 
 function unwrap(data) {

@@ -129,7 +129,7 @@ function refreshMapMarkers() {
   if (origin) {
     L.circleMarker([origin.lat, origin.lng], {
       radius: 8, color: '#b7791f', fillColor: '#f6e05e', fillOpacity: 0.9,
-    }).addTo(_mapaLayer).bindPopup('<b>Punto de partida del grupo</b>');
+    }).addTo(_mapaLayer).bindPopup('<b>Tu punto de partida</b>' + (origin.texto ? '<div style="font-size:0.78rem">' + esc(origin.texto) + '</div>' : ''));
   }
 
   const pts = dests.map(d => [d.geo.lat, d.geo.lng]);
@@ -138,17 +138,19 @@ function refreshMapMarkers() {
   else if (pts.length > 1) _mapaInstance.fitBounds(L.latLngBounds(pts).pad(0.2));
 }
 
-// ── Editor del punto de partida común ───────────────────────────────────────
+// ── Editor del punto de partida (propio y común del grupo) ─────────────────
 function buildOriginEditor(host) {
+  const propio = puntoPartida();
   host.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.85rem">
-      <label>Punto de partida comun del grupo:</label>
-      <input type="text" class="mp-origen-q" placeholder="Calle, ciudad o «40.4168,-3.7038»" style="flex:1;min-width:180px;padding:6px 8px">
+      <label><i class="fa-solid fa-person-walking-arrow-right" aria-hidden="true"></i> Tu punto de partida:</label>
+      <input type="text" class="mp-origen-q" placeholder="${propio ? 'Actual: ' + propio.lat.toFixed(4) + ', ' + propio.lng.toFixed(4) + ' («' + (propio.texto || '') + '»)' : 'Calle, ciudad o «40.4168,-3.7038»'}" style="flex:1;min-width:180px;padding:6px 8px">
       <button type="button" class="btn-pc mp-origen-buscar">Fijar</button>
-      <button type="button" class="btn-pc mp-origen-geo" title="Usar mi ubicación actual">Mi ubicacion</button>
+      <button type="button" class="btn-pc mp-origen-geo" title="Usar mi ubicación actual"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> Mi ubicación</button>
       <button type="button" class="btn-pc mp-origen-clear">Borrar</button>
       <span class="mp-origen-status" style="color:var(--muted);font-size:0.78rem"></span>
-    </div>`;
+    </div>
+    <p style="font-size:0.76rem;color:var(--muted);margin-top:6px">Indica desde dónde sales el día del viaje: los destinos mostrarán su distancia respecto a este punto. Puedes cambiarlo también en «Mi cuenta».</p>`;
 
   const inp = host.querySelector('.mp-origen-q');
   const status = host.querySelector('.mp-origen-status');
@@ -158,6 +160,7 @@ function buildOriginEditor(host) {
   const fijar = (coords, texto) => {
     setPuntoPartida({ lat: coords.lat, lng: coords.lng, texto: texto || '' });
     status.textContent = 'Origen actualizado';
+    inp.value = '';
     refreshMapMarkers();
     if (typeof renderAllQuestions === 'function') renderAllQuestions();
     if (typeof restoreDraft === 'function') restoreDraft();

@@ -76,8 +76,15 @@ function bindMapModal() {
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeMapModal(); });
   const btnClose = $('map-modal-close');
   if (btnClose) btnClose.addEventListener('click', closeMapModal);
+  // Botón "Ver mapa" dentro del menú lateral
+  const btnMap = $('btn-map-modal');
+  if (btnMap) btnMap.addEventListener('click', () => { closeSideNav(); openMapModal(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeMapModal(); closeSideNav(); }
+    if (e.key === 'Escape') {
+      closeMapModal();
+      closeSideNav();
+      if (typeof closeAccountModal === 'function') closeAccountModal();
+    }
   });
 }
 
@@ -160,6 +167,7 @@ function bindNavigation() {
   const bd = $('side-nav-backdrop');
   if (bd) bd.addEventListener('click', closeSideNav);
   if (typeof bindMapModal === 'function') bindMapModal();
+  if (typeof bindAccountModal === 'function') bindAccountModal();
 
   const surveyScreen = $('survey-screen');
   if (surveyScreen) {
