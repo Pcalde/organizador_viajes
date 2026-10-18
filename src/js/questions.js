@@ -70,6 +70,7 @@ function buildQuestionCard(q, idx) {
       ` : ''}
       <label style="font-size:0.78rem;color:var(--muted)">Descripción / texto explicativo (opcional)</label>
         <textarea class="inp-edit-q-desc" rows="2" maxlength="500" placeholder="Texto que verá el grupo bajo el título">${esc(cfg.descripcion || '')}</textarea>
+      ${q.tipo !== 'textarea' ? '<div class="cond-editor-host q-cond-host"></div>' : ''}
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" class="btn-pc btn-cancel-eq">Cancelar</button>
         <button type="button" class="btn-propose btn-save-eq" style="padding:6px 14px;font-size:0.8rem">Guardar cambios</button>
@@ -79,10 +80,27 @@ function buildQuestionCard(q, idx) {
   card.appendChild(editBox);
   let getFr = null;
   if (q.tipo === 'horarios') getFr = buildFranjasEditor(editBox.querySelector('.eq-franjas-host'), getFranjas(q));
+  // Editor de la condición «mostrar solo si…» (secciones.js): pregunta previa
+  // + operador + valor. Se pinta cuando el panel se abre, con el estado actual.
+  let getCond = null;
+  const condHost = editBox.querySelector('.q-cond-host');
+  if (condHost && typeof buildCondEditor === 'function') {
+    btnEdit.addEventListener('click', () => {
+      if (editBox.style.display !== 'none') {
+        getCond = buildCondEditor(condHost, schema, q.id, q.config && q.config.mostrarSi);
+      }
+    });
+  }
 
-  btnEdit.addEventListener('click', () => {
-    editBox.style.display = editBox.style.display === 'none' ? 'flex' : 'none';
-  });
+  const toggleEditBox = () => {
+    const opening = editBox.style.display === 'none';
+    editBox.style.display = opening ? 'flex' : 'none';
+    if (opening && condHost && typeof buildCondEditor === 'function') {
+      getCond = buildCondEditor(condHost, schema, q.id, q.config && q.config.mostrarSi);
+    }
+  };
+
+  btnEdit.addEventListener('click', toggleEditBox);
   editBox.querySelector('.btn-cancel-eq').addEventListener('click', () => {
     editBox.style.display = 'none';
   });
@@ -101,6 +119,19 @@ function buildQuestionCard(q, idx) {
       newCfg.duracionIdeal = Math.max(1, Math.min(12, Number(editBox.querySelector('.inp-eq-dur').value) || 3));
     }
     newCfg.descripcion = editBox.querySelector('.inp-edit-q-desc').value.trim();
+    // Condición de visibilidad: solo sobre preguntas ANTERIORES en el orden
+    // (regla anti-ciclos, validada también aquí y al reordenar).
+    if (getCond) {
+      const cond = getCond.read();
+      if (cond) {
+        const errCond = typeof validarMostrarSi === 'function'
+          ? validarMostrarSi(cond, schema, q.id) : null;
+        if (errCond) { showStatus(errCond, 'err', 6000); return; }
+        newCfg.mostrarSi = cond;
+      } else {
+        delete newCfg.mostrarSi;
+      }
+    }
     try {
       await apiAuth({
         action: 'edit_pregunta',

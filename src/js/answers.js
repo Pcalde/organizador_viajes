@@ -5,6 +5,9 @@ let patchTimer = null;
 // El estado de sincronización se muestra DENTRO del botón de envío:
 //   · "Actualizar respuesta →" si hay cambios locales sin enviar
 //   · "✓ Todo al día"         si está sincronizado con el grupo
+// El botón de envío vive en la barra inferior del cuestionario (#sec-submit,
+// secciones.js). #btn-generate queda oculto pero sigue siendo el "motor": su
+// texto/estado se propaga a la barra con cada cambio.
 function updateSubmitBtnLabel() {
   const btn = $('btn-generate');
   if (!btn || btn.disabled) return; // no pisar el texto transitorio "Enviando…"
@@ -13,15 +16,8 @@ function updateSubmitBtnLabel() {
   syncFabClone();
 }
 
-// El botón de envío vive ahora en una barra fija que acompaña al usuario
-// durante el scroll. wizard.js mantiene #btn-generate-fab (clon flotante,
-// visible cuando la barra del asistente está oculta) sincronizado con él.
 function syncFabClone() {
-  const btn = $('btn-generate'), fab = $('btn-generate-fab');
-  if (!btn || !fab) return;
-  fab.textContent = btn.textContent;
-  fab.disabled = btn.disabled;
-  fab.classList.toggle('up-to-date', btn.classList.contains('up-to-date'));
+  if (typeof syncSubmitBar === 'function') syncSubmitBar();
 }
 
 function setDraftDirty(isDirty) {
@@ -35,7 +31,25 @@ function triggerSave() {
   setDraftDirty(true);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveDraft, SAVE_DEBOUNCE);
+  // Hook del cuestionario por secciones (secciones.js): recalcula visibilidad
+  // condicional, raíl y barra tras cada cambio de respuesta. Se difiere al
+  // siguiente tick para no repintar en medio del evento que lo dispara.
+  if (typeof window.onSecChange === 'function') setTimeout(window.onSecChange, 0);
 }
+
+// Lectura del borrador con caché corto: varias funciones (raíl, barra,
+// condiciones) consultan las mismas respuestas en el mismo ciclo de render.
+var _readStateCache = null;
+var _readStateTs    = 0;
+function readStateCached(maxAgeMs) {
+  const now = Date.now();
+  if (!_readStateCache || now - _readStateTs > (maxAgeMs || 120)) {
+    _readStateCache = readState();
+    _readStateTs    = now;
+  }
+  return _readStateCache;
+}
+function invalidateReadStateCache() { _readStateTs = 0; _readStateCache = null; }
 
 function readState() {
   const answers = {};
@@ -98,19 +112,24 @@ function hydrateFromServerIfNoDraft() {
   setDraftDirty(false);
 }
 
-// Genera el payload: guarda el mapa uniforme `values` y mantiene las propiedades legacy
+// Genera el payload: guarda el mapa uniforme `values` y mantiene las propiedades legacy.
+// Las preguntas OCULTAS por condición (config.mostrarSi) se conservan en el
+// borrador local pero se EXCLUYEN del envío: si no, buildModelData las contaría.
 function collectAnswers() {
   const st = readState();
   const result = {
     timestamp: new Date().toISOString(),
-    values: st.answers,
+    values: {},
     opciones: [],
     casas: [],
     extras: {},
   };
 
   schema.forEach(q => {
+    // Visibilidad evaluada sobre el propio borrador recién leído (sin caché).
+    if (typeof esVisible === 'function' && !esVisible(q, st.answers)) return;
     const v = st.answers[q.id];
+    result.values[q.id] = v;
     if (v == null) return;
     switch (q.id) {
       case 'opciones-destino': result.opciones    = v; break;
@@ -155,19 +174,15 @@ function validarRespuestas() {
 
 async function enviarRespuesta(silent = false) {
   if (!user) return;
-  const btn = $('btn-generate');
-  const fab = $('btn-generate-fab');
-
-  // Si se pulsa el clon flotante, trabajar con él como botón activo
-  const active = (btn && !btn.disabled) ? btn : (fab || btn);
+  const btn    = $('btn-generate');
+  const submit = $('sec-submit');
 
   const err = validarRespuestas();
   if (err) { showStatus(err, 'err', 8000); return; }
 
-  if (active && !silent) {
-    if (btn) btn.disabled = true;
-    if (fab) fab.disabled = true;
-    if (active.textContent !== 'Enviando…') active.textContent = 'Enviando…';
+  if (!silent) {
+    if (btn)    { btn.disabled = true; btn.textContent = 'Enviando…'; }
+    if (submit) { submit.disabled = true; submit.textContent = 'Enviando…'; }
   }
   try {
     const answers = collectAnswers();
@@ -194,9 +209,10 @@ async function enviarRespuesta(silent = false) {
   } catch (e) {
     showStatus('Error al enviar: ' + e.message, 'err', 8000);
   } finally {
-    if (btn && !silent) {
-      btn.disabled = false;
-      updateSubmitBtnLabel(); // "✓ Todo al día" tras sincronizar (incluye el clon flotante)
+    if (!silent) {
+      if (btn)    btn.disabled = false;
+      if (submit) submit.disabled = false;
+      updateSubmitBtnLabel(); // "✓ Todo al día" tras sincronizar (incluye la barra inferior)
     }
   }
 }
@@ -223,6 +239,8 @@ function patchSingleAnswer(qid, newVal) {
 
   if (typeof renderReformulario === 'function') renderReformulario();
   if (typeof scheduleRefreshSections === 'function') scheduleRefreshSections();
+  // Un voto en vivo puede activar/desactivar secciones condicionales.
+  if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
 
   clearTimeout(patchTimer);
   patchTimer = setTimeout(() => enviarRespuesta(true), 500);
@@ -231,7 +249,7 @@ function patchSingleAnswer(qid, newVal) {
 function bindSubmit() {
   const btn = $('btn-generate');
   if (btn) btn.addEventListener('click', () => enviarRespuesta(false));
-  // El clon flotante #btn-generate-fab debe funcionar igual que el original
-  const fab = $('btn-generate-fab');
-  if (fab) fab.addEventListener('click', () => enviarRespuesta(false));
+  // El botón visible de la barra inferior delega en el mismo flujo de envío.
+  const bar = $('sec-submit');
+  if (bar) bar.addEventListener('click', () => enviarRespuesta(false));
 }
