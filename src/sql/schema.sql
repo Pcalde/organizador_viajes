@@ -210,6 +210,57 @@ begin
   return _snapshot(p_eid);
 end $$;
 
+-- Cambiar el propio nombre y/o la contraseña (PIN). Requiere autenticación con
+-- el PIN actual; propaga el rename a todas las tablas donde aparece el usuario.
+create or replace function update_profile(p_eid text, p_nombre text, p_pin text,
+                                          p_nuevo_nombre text default null,
+                                          p_nuevo_pin    text default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb; nm text; nn text;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  nm := a->>'nombre';
+
+  if p_nuevo_pin is not null and char_length(btrim(p_nuevo_pin)) < 32 then
+    return jsonb_build_object('error', 'PIN nuevo inválido');
+  end if;
+
+  if p_nuevo_nombre is not null then
+    nn := btrim(coalesce(p_nuevo_nombre, ''));
+    if char_length(nn) < 1 or char_length(nn) > 40 then
+      return jsonb_build_object('error', 'El nombre debe tener entre 1 y 40 caracteres');
+    end if;
+    if lower(nn) <> lower(nm) and exists (
+      select 1 from usuarios where eid = p_eid and lower(nombre) = lower(nn)
+    ) then
+      return jsonb_build_object('error', 'Ese nombre ya está en uso en el grupo');
+    end if;
+    if lower(nn) <> lower(nm) then
+      update usuarios   set nombre = nn where eid = p_eid and lower(nombre) = lower(nm);
+      update respuestas set nombre = nn where eid = p_eid and lower(nombre) = lower(nm);
+      update ausencias  set votante = nn where eid = p_eid and lower(votante) = lower(nm);
+      update ausencias  set candidatos = (
+        select jsonb_agg(case when lower(c #>> '{}') = lower(nm)
+                              then to_jsonb(nn) else c end)
+        from jsonb_array_elements(ausencias.candidatos) c
+      ) where eid = p_eid and jsonb_typeof(candidatos) = 'array'
+        and exists (select 1 from jsonb_array_elements(ausencias.candidatos) c
+                    where lower(c #>> '{}') = lower(nm));
+      update proscontras set autor = nn where eid = p_eid and lower(autor) = lower(nm);
+      update debate      set autor = nn where eid = p_eid and lower(autor) = lower(nm);
+      nm := nn;
+    end if;
+  end if;
+
+  if p_nuevo_pin is not null then
+    update usuarios set pin_hash = crypt(p_nuevo_pin, gen_salt('bf', 8))
+     where eid = p_eid and lower(nombre) = lower(nm);
+  end if;
+
+  return jsonb_build_object('ok', true, 'nombre', nm);
+end $$;
+
 -- Permite a cada participante borrar su propia cuenta y todos sus datos asociados.
 create or replace function delete_participant(p_eid text, p_nombre text, p_pin text, p_participante text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$

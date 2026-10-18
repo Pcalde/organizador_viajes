@@ -117,6 +117,27 @@ async function storePinHash(eid, pinHash) {
   } catch (e) {}
 }
 
+// Tras cambiar de nombre en update_profile: actualiza el registro de sesión
+// guardado y re-sella ctPin/seal con una nueva sal, de modo que la sesión
+// restaurada use el nombre canónico nuevo (sin invalidar otras pestañas).
+async function renameSavedSession(nuevoNombre) {
+  const s = getSavedSessionRaw();
+  if (!s || !sessionSecretB64) return;
+  try {
+    let hex = null;
+    try { hex = await aesDecrypt(sessionSecretB64, s.ctPin, s.salt); } catch (e) {}
+    let sealed = null;
+    try { sealed = await aesDecrypt(await _keyFromToken(s.token), s.seal, s.salt); } catch (e) {}
+    if (!hex || !sealed) return;
+    const salt2 = s.eid + '|' + Date.now();
+    s.nombre = nuevoNombre;
+    s.salt   = salt2;
+    s.ctPin  = await aesEncrypt(sessionSecretB64, hex, salt2);
+    s.seal   = await aesEncrypt(await _keyFromToken(s.token), sealed, salt2);
+    localStorage.setItem(LS_SESSION, JSON.stringify(s));
+  } catch (e) {}
+}
+
 // ── revocación sincronizada entre pestañas del mismo navegador ──────────────
 function _announceRevocation(s) {
   try {
