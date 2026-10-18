@@ -104,15 +104,19 @@ function _extractRaw(ansObj, q) {
     case 'casas':            return ansObj.casas ?? null;
     case 'precio':           return ansObj.precioMaxPP ?? null;
     case 'transporte':       return ansObj.transporte ?? null;
-    case 'disponibilidad':
+    case 'disponibilidad': {
       if (!ansObj.disponibilidad && !ansObj.rangosFechas && !ansObj.diasMax) return null;
+      const disp = ansObj.disponibilidad || {};
       return {
-        diasMax: ansObj.diasMax ?? 5,
-        soloFinde: !!(ansObj.disponibilidad && ansObj.disponibilidad.soloFinde),
-        meDaIgual: !!(ansObj.disponibilidad && ansObj.disponibilidad.meDaIgual),
-        preferirPuente: !!(ansObj.disponibilidad && ansObj.disponibilidad.preferirPuente),
-        rangos: ansObj.rangosFechas || [],
+        ...disp,
+        diasMax: disp.diasMax ?? ansObj.diasMax ?? 5,
+        soloFinde: !!disp.soloFinde,
+        soloEntreSemana: !!disp.soloEntreSemana,
+        meDaIgual: !!disp.meDaIgual,
+        preferirPuente: !!disp.preferirPuente,
+        rangos: disp.rangos || ansObj.rangosFechas || [],
       };
+    }
     default:
       return (ansObj.extras && q.id in ansObj.extras) ? ansObj.extras[q.id] : null;
   }

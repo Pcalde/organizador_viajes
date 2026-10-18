@@ -211,10 +211,18 @@ async function submitNewQuestion() {
   // tarjeta «marca» de una sección nueva se crea aquí mismo si no existe.
   const secElegida = aqSeccionElegida();
   if (secElegida) {
+    const selector = $('add-q-seccion');
+    const esNueva = selector && selector.value === AQ_SEC_NUEVA;
+    if (!esNueva && typeof secNombreExiste === 'function' && !secNombreExiste(secElegida)) {
+      showStatus('La sección seleccionada ya no está disponible. Actualiza la lista e inténtalo otra vez.', 'err', 6000);
+      rebindAddQSeccion();
+      return;
+    }
     config.seccion = secElegida;
     if (typeof secHeaderPara === 'function' && !secHeaderPara(secElegida) &&
         typeof crearSeccion === 'function') {
-      crearSeccion(secElegida);   // fire-and-forget: pollOnce traerá la marca
+      await crearSeccion(secElegida);
+      if (!secNombreExiste(secElegida)) return; // No guardar preguntas en una sección que no se pudo crear.
     }
   }
 
@@ -243,15 +251,38 @@ async function submitNewQuestion() {
   // La sección nueva entra en el raíl/barra (y si es condicional, visible ya).
   if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
 
+  let preguntaGuardada = false;
   try {
     await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta });
+    preguntaGuardada = true;
     // Refresca el snapshot (incluida la posición inicial asignada por SQL).
     lastRaw = '';
     await pollOnce();
+    const guardada = schema.find(q => q.id === pregunta.id);
+    if (secElegida && guardada && String(guardada.config?.seccion || '').trim() !== secElegida) {
+      const configFinal = { ...(guardada.config || {}), seccion: secElegida };
+      await apiAuth({ action: 'edit_pregunta', eid: user.eid, nombre: user.nombre,
+        pinHash: user.pinHash, questionId: guardada.id, config: configFinal });
+      guardada.config = configFinal;
+      const guardadaCard = cardFor(guardada.id);
+      if (guardadaCard) guardadaCard.dataset.cfg = JSON.stringify(configFinal);
+    }
+    // Asegura un encabezado si el sondeo devuelve un grupo heredado sin marca.
+    if (secElegida && typeof secHeaderPara === 'function' && !secHeaderPara(secElegida)) {
+      await crearSeccion(secElegida);
+    }
+    if (secElegida && typeof colocarPreguntaEnSeccion === 'function') {
+      await colocarPreguntaEnSeccion(pregunta.id, secElegida);
+    }
   } catch (e) {
-    if (card) card.remove();
-    const i = schema.indexOf(pregunta);
-    if (i >= 0) schema.splice(i, 1);
+    if (preguntaGuardada) {
+      lastRaw = '';
+      await pollOnce();
+    } else {
+      if (card) card.remove();
+      const i = schema.indexOf(pregunta);
+      if (i >= 0) schema.splice(i, 1);
+    }
     showStatus('No se pudo crear la pregunta: ' + e.message, 'err');
     if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
   }

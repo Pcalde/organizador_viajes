@@ -99,7 +99,7 @@ function buildQuestionCard(q, idx) {
           .concat(nombres.map(n => `<option value="${esc(n)}"${n === actual ? ' selected' : ''}>${esc(n)}</option>`));
         if (actual && !nombres.includes(actual))
           opts.push(`<option value="${esc(actual)}" selected>${esc(actual)} (nueva)</option>`);
-        return `<label style="font-size:0.78rem;color:var(--muted)">Sección (agrupa esta pregunta en el raíl)</label>
+        return `<label style="font-size:0.78rem;color:var(--muted)">Mover a otra sección</label>
           <select class="inp-eq-seccion">${opts.join('')}</select>
           <input type="text" class="inp-eq-seccion-nombre" maxlength="60" placeholder="Nombre de la sección nueva…" style="display:none">`;
       })()}
@@ -178,7 +178,17 @@ function buildQuestionCard(q, idx) {
         secCambiada = true;
         if (secSel) newCfg.seccion = secSel; else delete newCfg.seccion;
         if (secSel && typeof secHeaderPara === 'function' && !secHeaderPara(secSel)) {
-          crearSeccion(secSel);   // fire-and-forget: pollOnce traerá la marca
+          if (typeof crearSeccion !== 'function') {
+            showStatus('No se pudo preparar esa sección. Recarga la página e inténtalo de nuevo.', 'err', 6000);
+            return;
+          }
+          try {
+            await crearSeccion(secSel);
+          } catch (e) {
+            showStatus('No se pudo preparar la sección: ' + e.message, 'err', 6000);
+            return;
+          }
+          if (typeof secNombreExiste === 'function' && !secNombreExiste(secSel)) return;
         }
       }
     }
@@ -203,6 +213,9 @@ function buildQuestionCard(q, idx) {
       });
       q.label = newLabel;
       q.config = newCfg;
+      if (secCambiada && newCfg.seccion && typeof colocarPreguntaEnSeccion === 'function') {
+        await colocarPreguntaEnSeccion(q.id, newCfg.seccion);
+      }
       renderAllQuestions();
       restoreDraft();
       // El raíl y las condiciones pueden haber cambiado (nuevo mostrarSi,

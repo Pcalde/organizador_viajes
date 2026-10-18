@@ -1,17 +1,17 @@
-// ══════════════════════════════════════════════════════════════════════════
+﻿// ==========================================================================
 //  CUESTIONARIO POR SECCIONES (js/secciones.js)
 //  Sustituye al antiguo «modo asistente» de wizard.js: el cuestionario es
 //  SIEMPRE por secciones (una visible cada vez), sin interruptor.
 //
-//   · Raíl de secciones a la izquierda (número, título completo en hasta
-//     2 líneas, estado ✓ respondida / ● actual / ○ pendiente / ∅ no aplica).
-//   · En pantallas <760 px el raíl pasa a chips horizontales con scroll.
-//   · Barra inferior fija: ← Anterior · «n de N» · Siguiente → · Enviar.
+//   · Raí­l de secciones a la izquierda (número, tí­tulo completo en hasta
+//     2 lí­neas, estado âœ“ respondida / ● actual / ○ pendiente / âˆ… no aplica).
+//   · En pantallas <760 px el raí­l pasa a chips horizontales con scroll.
+//   · Barra inferior fija: â† Anterior · «n de N» · Siguiente → · Enviar.
 //   · Condiciones de visibilidad por pregunta: q.config.mostrarSi =
 //     {qid, op: 'incluye'|'igual'|'alguno', valor, no?}. Se evalúan sobre el
 //     BORRADOR (readState()), solo sobre preguntas anteriores en el orden
-//     (así no hay ciclos). Las ocultas se conservan en el borrador pero se
-//     excluyen del envío (collectAnswers).
+//     (así­ no hay ciclos). Las ocultas se conservan en el borrador pero se
+//     excluyen del enví­o (collectAnswers).
 //   · Panel «Ver qué responde el grupo» bajo cada sección, plegado según el
 //     ajuste global persistido en localStorage (visible | plegado | esperar).
 //
@@ -19,15 +19,15 @@
 //  nada de monkeypatching de renderAllQuestions. Cárgalo en index.html
 //  después de reformulario.js y antes de auth.js.
 //  Requiere: state.js, questions.js, answers.js, reformulario.js, types.js.
-// ══════════════════════════════════════════════════════════════════════════
+// ==========================================================================
 
 var SEC_LS_GROUPINFO = 'cuestionador_groupinfo_v1'; // 'visible' | 'plegado' | 'esperar'
-var SEC_ESTADO = { idx: 0 };                        // índice (sobre schema) de la pregunta activa
+var SEC_ESTADO = { idx: 0 };                        // í­ndice (sobre schema) de la pregunta activa
 
-// ── MODELO DE SECCIONES ─────────────────────────────────────────────────────
-// El raíl agrupa las preguntas por q.config.seccion. Las preguntas sin sección
-// forman una sección implícita con su propio título; si varias comparten el
-// mismo título, todas juntas forman UNA sección. Una pregunta marcada con
+// -- MODELO DE SECCIONES -----------------------------------------------------
+// El raí­l agrupa las preguntas por q.config.seccion. Las preguntas sin sección
+// forman una sección implí­cita con su propio tí­tulo; si varias comparten el
+// mismo tí­tulo, todas juntas forman UNA sección. Una pregunta marcada con
 // config.esEncabezado define siempre una sección propia (aunque no tenga
 // respuestas): es la «tarjeta marca» que crea el botón «+ Nueva sección».
 function _secNormNombre(s) { return String(s || '').trim().toLowerCase(); }
@@ -58,7 +58,7 @@ function seccionesDelEsquema() {
   return secs;
 }
 
-// Preguntas visibles de una sección (excluye la tarjeta «marca» del raíl).
+// Preguntas visibles de una sección (excluye la tarjeta «marca» del raí­l).
 function _secItemsVisibles(sec, answers) {
   return sec.items.filter(it => !(it.q.config && it.q.config.esEncabezado) && esVisible(it.q, answers));
 }
@@ -77,7 +77,7 @@ function _secDeIdx(idx, secs) {
     (!key && s.items.some(it => it.i === idx))) || null;
 }
 
-// Índice de la primera pregunta visible de una sección (o -1).
+// índice de la primera pregunta visible de una sección (o -1).
 function _secPrimeraVisible(sec, answers) {
   const vis = _secItemsVisibles(sec, answers);
   if (vis.length) return vis[0].i;
@@ -85,7 +85,7 @@ function _secPrimeraVisible(sec, answers) {
   return sec.items.length ? sec.items[0].i : -1;
 }
 
-// ── Ajuste global de la información del grupo ───────────────────────────────
+// -- Ajuste global de la información del grupo -------------------------------
 function getGroupInfoMode() {
   let m = null;
   try { m = localStorage.getItem(SEC_LS_GROUPINFO); } catch (e) {}
@@ -97,7 +97,7 @@ function setGroupInfoMode(mode) {
   refreshSecciones();
 }
 
-// El botón de envío vive en la barra inferior (#sec-submit); #btn-generate se
+// El botón de enví­o vive en la barra inferior (#sec-submit); #btn-generate se
 // mantiene sincronizado para que todo lo existente (bindSubmit, estados) siga
 // funcionando sin duplicar lógica.
 function syncSubmitBar() {
@@ -108,7 +108,7 @@ function syncSubmitBar() {
   bar.classList.toggle('up-to-date', btn.classList.contains('up-to-date'));
 }
 
-// ── Editor de condiciones («mostrar si…») ───────────────────────────────────
+// -- Editor de condiciones («mostrar si…») -----------------------------------
 // Construye un mini-formulario reutilizable: pregunta previa + operador +
 // valor (poblado con las opciones de aquella). `onlyBefore` limita la lista de
 // preguntas a las que van antes de `qid` en el orden (regla anti-ciclos).
@@ -116,24 +116,25 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
   host.innerHTML = '';
   const cur = initial && typeof initial === 'object' ? initial : null;
 
-  const lbl = document.createElement('label');
+  const panel = div('cond-editor-panel');
+  const lbl = document.createElement('div');
   lbl.className = 'cond-editor-title';
-  lbl.innerHTML = '<i class="fa-solid fa-code-branch" aria-hidden="true"></i> Mostrar solo si… <span class="cond-hint">(opcional — deja «Sin condición» para mostrar siempre)</span>';
+  lbl.innerHTML = '<span class="cond-editor-icon"><i class="fa-solid fa-code-branch" aria-hidden="true"></i></span><span><b>Mostrar esta pregunta según otra respuesta</b><small>Opcional · Si no añades una regla, siempre estará visible.</small></span>';
 
   const grid = div('cond-editor-grid');
   const selQ = document.createElement('select'); selQ.className = 'cond-q';
   const selOp = document.createElement('select'); selOp.className = 'cond-op';
   const selVal = document.createElement('select'); selVal.className = 'cond-val';
   const selNeg = document.createElement('select'); selNeg.className = 'cond-neg';
-  selNeg.innerHTML = '<option value="">si</option><option value="1">no</option>';
+  selNeg.innerHTML = '<option value="">Sí­, se cumple</option><option value="1">No, al contrario</option>';
 
   // Candidatas: preguntas ANTERIORES a `currentQid` en el orden (regla
-  // anti-ciclos). Con `currentQid` vacío (pregunta nueva → se añade al final)
+  // anti-ciclos). Con `currentQid` vací­o (pregunta nueva → se añade al final)
   // cualquier pregunta con opciones sirve. textarea/disponibilidad/horarios
-  // no tienen opciones, así que quedan fuera automáticamente.
+  // no tienen opciones, así­ que quedan fuera automáticamente.
   const ci = currentQid ? schemaArr.findIndex(x => x.id === currentQid) : -1;
   const candidates = (schemaArr || []).filter((q, i) =>
-    q.id !== currentQid && (q.opciones || []).length > 0 &&
+    q.id !== currentQid && ((q.opciones || []).length > 0 || q.tipo === 'disponibilidad') &&
     (ci < 0 || i < ci));
 
   const fillQ = () => {
@@ -141,28 +142,38 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
       candidates.map(q => `<option value="${esc(q.id)}">${esc(q.label)}</option>`).join('');
     if (cur && cur.qid && candidates.some(q => q.id === cur.qid)) selQ.value = cur.qid;
   };
-  // 'alguno' admite una lista de valores; aquí se representa como «incluye
+  // 'alguno' admite una lista de valores; aquí­ se representa como «incluye
   // CUALQUIERA de…» y se guarda como {op:'alguno', valor:[...]}.
   const OPS_FOR = q =>
     !q ? [] :
     q.tipo === 'checkbox' || q.tipo === 'casas' ? ['incluye', 'alguno'] :
-    q.tipo === 'voto-ponderado' ? ['incluye', 'igual', 'alguno'] :
+    q.tipo === 'disponibilidad' ? ['incluye', 'alguno'] :
+    q.tipo === 'voto-ponderado' ? ['incluye', 'alguno'] :
     q.tipo === 'radio' ? ['igual'] : [];
 
   const fillOps = q => {
     const ops = OPS_FOR(q);
-    selOp.innerHTML = ops.map(o => `<option value="${o}">${
-      o === 'incluye' ? 'incluye la opción' : o === 'alguno' ? 'incluye CUALQUIERA de…' : 'es exactamente'}</option>`).join('');
+    selOp.innerHTML = ops.map(o => {
+      const positiveVote = q && q.tipo === 'voto-ponderado';
+      const label = o === 'incluye'
+        ? (positiveVote ? 'ha valorado positivamente (+1 o +3)' : 'incluye la opción')
+        : o === 'alguno'
+          ? (positiveVote ? 'ha valorado alguna positivamente (+1 o +3)' : 'incluye CUALQUIERA de…')
+          : 'es exactamente';
+      return `<option value="${o}">${label}</option>`;
+    }).join('');
     if (cur && q && cur.qid === q.id && ops.includes(cur.op)) selOp.value = cur.op;
   };
-  const optValsOf = q => (q && q.opciones ? q.opciones : []).map(op => optVal(q, op));
+  const condOptionsOf = q => q && q.tipo === 'disponibilidad'
+    ? DISP_PREFERENCIAS_OPCIONES
+    : (q && q.opciones ? q.opciones : []).map(op => ({ value: optVal(q, op), label: optVal(q, op) }));
   const fillVals = q => {
-    const vals = optValsOf(q);
+    const vals = condOptionsOf(q);
     const multi = selOp.value === 'alguno';
     selVal.multiple = multi;
     selVal.size = multi ? Math.min(Math.max(vals.length, 2), 6) : 1;
     selVal.innerHTML = vals.length
-      ? vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('')
+      ? vals.map(v => `<option value="${esc(v.value)}">${esc(v.label)}</option>`).join('')
       : '<option value="">(esta pregunta no tiene opciones aún)</option>';
     if (cur && q && cur.qid === q.id) {
       const list = (Array.isArray(cur.valor) ? cur.valor : [cur.valor]).map(String);
@@ -183,8 +194,21 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
   });
   fillQ(); sync();
 
-  grid.append(selQ, selOp, selVal, selNeg);
-  host.append(lbl, grid);
+  const step = (n, title, control, cls) => {
+    const wrap = div('cond-step ' + (cls || ''));
+    const caption = document.createElement('label');
+    caption.innerHTML = `<span>${n}</span>${title}`;
+    wrap.append(caption, control);
+    return wrap;
+  };
+  grid.append(
+    step('1', 'Pregunta de referencia', selQ, 'cond-step-question'),
+    step('2', 'Qué debe responder', selOp, 'cond-step-op'),
+    step('3', 'Elección', selVal, 'cond-step-value'),
+    step('4', 'Coincidencia', selNeg, 'cond-step-neg')
+  );
+  panel.append(lbl, grid);
+  host.append(panel);
   return {
     read() {
       if (!selQ.value) return null;
@@ -214,9 +238,11 @@ function validarMostrarSi(cond, schemaArr, selfId, beforeIdx) {
   if (!src) return 'La pregunta de la condición ya no existe.';
   const si = schemaArr.findIndex(q => q.id === src.id);
   if (bi >= 0 && si >= bi) return `«${src.label}» debe ir antes de «${(schemaArr[bi] || {}).label || selfId}» en el orden.`;
-  if (!['checkbox', 'voto-ponderado', 'radio', 'casas'].includes(src.tipo))
-    return 'Las condiciones solo funcionan sobre checkbox, voto ponderado, radio o casas.';
-  const vals = (src.opciones || []).map(op => optVal(src, op));
+  if (!['checkbox', 'voto-ponderado', 'radio', 'casas', 'disponibilidad'].includes(src.tipo))
+    return 'Las condiciones solo funcionan sobre preguntas con opciones o preferencias.';
+  const vals = src.tipo === 'disponibilidad'
+    ? DISP_PREFERENCIAS_OPCIONES.map(op => op.value)
+    : (src.opciones || []).map(op => optVal(src, op));
   const list = Array.isArray(cond.valor) ? cond.valor : [cond.valor];
   if (!list.length) return 'Elige al menos un valor para la condición.';
   for (const v of list) {
@@ -227,7 +253,7 @@ function validarMostrarSi(cond, schemaArr, selfId, beforeIdx) {
 }
 
 // ¿La pregunta `qid` depende (directa o transitivamente) de `depOn`? Se usa
-// al reordenar: mover una pregunta por encima de su fuente rompería la regla
+// al reordenar: mover una pregunta por encima de su fuente romperí­a la regla
 // anti-ciclos («solo condiciones sobre preguntas anteriores»).
 function condicionDependeDe(schemaArr, qid, depOn) {
   let cur = schemaArr.find(q => q.id === qid);
@@ -242,21 +268,35 @@ function condicionDependeDe(schemaArr, qid, depOn) {
   return false;
 }
 
-// ── Visibilidad condicional ─────────────────────────────────────────────────
+// -- Visibilidad condicional -------------------------------------------------
 // Evalúa una respuesta cruda contra la condición. Soporta checkbox/casas
-// (array), voto-ponderado (dict; "incluye" ⇒ puntos > 0, "igual" ⇒ el punto
+// (array), voto-ponderado (dict; "incluye" â‡’ puntos > 0, "igual" â‡’ el punto
 // exacto) y radio (string u objeto {estado}). `valor` puede ser un valor
 // suelto o una lista (operador 'alguno').
 function _condMatch(raw, op, valor) {
   const list = (Array.isArray(valor) ? valor : [valor]).map(String);
   if (raw == null) return false;
+  if (raw && typeof raw === 'object') {
+    let preferencias = Array.isArray(raw.preferencias) ? raw.preferencias : null;
+    // Compatibilidad con respuestas anteriores al selector por categorí­as.
+    if (!preferencias && ['irYVenir', 'soloFinde', 'soloEntreSemana', 'meDaIgual', 'preferirPuente'].some(k => k in raw)) {
+      preferencias = [
+        raw.irYVenir ? 'plan:dia' : 'plan:indiferente',
+        raw.soloFinde ? 'dias:solo_finde' : raw.soloEntreSemana ? 'dias:solo_semana' : 'dias:indiferente',
+        raw.preferirPuente ? 'festivos:puente' : 'festivos:indiferente',
+      ];
+    }
+    if (preferencias) return preferencias.some(v => list.includes(String(v)));
+  }
   switch (op) {
     case 'igual':
       if (Array.isArray(raw)) return raw.map(String).some(v => list.includes(v));
       if (typeof raw === 'object') {
         if ('estado' in raw) return list.includes(String(raw.estado));
-        // voto-ponderado: la puntuación de alguna opción coincide exactamente
-        return Object.entries(raw).some(([k, s]) => list.includes(k) && Number(s) === Number(list[0]));
+        // Compatibilidad con condiciones antiguas en voto ponderado: una
+        // opción cuenta como elegida solo con voto positivo (+1 o +3), nunca -1.
+        const dict = normPond(raw);
+        return list.some(k => Number(dict[k]) > 0);
       }
       return list.includes(String(raw));
     case 'alguno':
@@ -314,7 +354,7 @@ function secRazonOculta(q, answers) {
 }
 
 // Avisa a la tarjeta ACTIVA de que sus respuestas no se enviarán (está oculta
-// por condición). Se re-evalúa en cada cambio vía refreshSecciones().
+// por condición). Se re-evalúa en cada cambio ví­a refreshSecciones().
 function updateHiddenNotice() {
   const container = $('questions-container');
   if (!container) return;
@@ -327,13 +367,13 @@ function updateHiddenNotice() {
   if (!card) return;
   const n = div('sec-hidden-notice');
   n.innerHTML = '<i class="fa-solid fa-eye-slash" aria-hidden="true"></i> <b>No aplica</b> con tus respuestas actuales ' +
-    esc(secRazonOculta(q)) + '. Tus cambios se guardan, pero no se envían al grupo.';
+    esc(secRazonOculta(q)) + '. Tus cambios se guardan, pero no se enví­an al grupo.';
   const controls = card.querySelector('.options-list');
   if (controls && controls.parentElement === card) card.insertBefore(n, controls);
   else card.appendChild(n);
 }
 
-// Preguntas visibles (referencias reales de `schema`, con su índice original).
+// Preguntas visibles (referencias reales de `schema`, con su í­ndice original).
 function visibleQuestions() {
   let st = null;
   const getSt = () => st || (st = readState());
@@ -350,12 +390,18 @@ function tieneCondicion(q) {
   return !!(q && q.config && q.config.mostrarSi && q.config.mostrarSi.qid);
 }
 
-// ── Ayudas de sección reutilizadas por questions.js / forms.js ──────────────
+// -- Ayudas de sección reutilizadas por questions.js / forms.js --------------
 // Lista de nombres de sección existentes en el esquema (para poblar los
 // desplegables «Sección» del editor de preguntas y del formulario alta).
 function nombresDeSecciones() {
-  const out = [];
-  seccionesDelEsquema().forEach(s => { if (s.nombre) out.push(s.nombre); });
+  const out = [], seen = new Set();
+  seccionesDelEsquema().forEach(s => {
+    // Las preguntas antiguas sin config.seccion forman secciones implí­citas
+    // con su propio tí­tulo; también deben poder elegirse como destino.
+    const nombre = String(s.nombre || s.titulo || '').trim();
+    const key = _secNormNombre(nombre);
+    if (nombre && !seen.has(key)) { seen.add(key); out.push(nombre); }
+  });
   return out;
 }
 
@@ -367,15 +413,61 @@ function secHeaderPara(nombre) {
     _secNormNombre(q.config.seccion || q.label) === key) || null;
 }
 
+async function crearEncabezadoParaSeccion(nombre, items) {
+  const id = 'seccion_' + String(nombre).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) + '_' + Date.now().toString(36);
+  const pregunta = { id, tipo: 'textarea', label: nombre, opciones: [], config: { esEncabezado: true, seccion: nombre, descripcion: '' } };
+  const first = items.length ? items[0].q : null;
+  const pos = first ? schema.findIndex(q => q.id === first.id) : schema.length;
+  schema.splice(pos < 0 ? schema.length : pos, 0, pregunta);
+  const card = buildQuestionCard(pregunta, Math.max(0, pos));
+  if (first) insertCardAntes(card, first); else $('questions-container')?.appendChild(card);
+  try {
+    await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta });
+    // add_pregunta inserta al final en el servidor: persistir el orden local
+    // evita que el encabezado reaparezca detrás tras el siguiente sondeo.
+    await apiAuth({ action: 'reordenar_preguntas', eid: user.eid, nombre: user.nombre,
+      pinHash: user.pinHash, ids: schema.map(q => q.id) });
+  } catch (e) {
+    card?.remove(); const idx = schema.indexOf(pregunta); if (idx >= 0) schema.splice(idx, 1); throw e;
+  }
+}
+
+// Compatibilidad con los editores: garantiza una sección con encabezado,
+// también cuando el destino procede de preguntas antiguas.
+async function crearSeccion(nombre) {
+  const name = String(nombre || '').trim();
+  if (!user || !name) throw new Error('Inicia sesión y escribe un nombre de sección.');
+  const section = seccionesDelEsquema().find(s => _secNormNombre(s.nombre || s.titulo) === _secNormNombre(name));
+  if (section && section.encabezadoIdx >= 0) return true;
+  const members = section ? section.items.map(it => it.q) : [];
+  for (const q of members) {
+    const config = { ...(q.config || {}), seccion: name };
+    await apiAuth({ action: 'edit_pregunta', eid: user.eid, nombre: user.nombre,
+      pinHash: user.pinHash, questionId: q.id, config });
+    q.config = config;
+    const card = cardFor(q.id); if (card) card.dataset.cfg = JSON.stringify(config);
+  }
+  await crearEncabezadoParaSeccion(name, members.map(q => ({ q })));
+  lastRaw = ''; await pollOnce(); refreshSecciones();
+  if (typeof rebindAddQSeccion === 'function') rebindAddQSeccion();
+  return true;
+}
+
+function secNombreExiste(nombre) {
+  const key = _secNormNombre(nombre);
+  return !!key && seccionesDelEsquema().some(sec =>
+    _secNormNombre(sec.nombre || sec.titulo) === key);
+}
+
 // Inserta `card` en el contenedor justo después de la tarjeta de `beforeQ`
 // (o al principio si no hay referencia). Mantiene DOM y esquema alineados:
 // polling/syncSchemaToDOM solo añaden/quitan tarjetas, nunca las reubican,
-// así que el orden visual depende exclusivamente de estas inserciones.
-function insertCardTras(card, beforeQ) {
+// así­ que el orden visual depende exclusivamente de estas inserciones.
+function insertCardAntes(card, beforeQ) {
   const cont = $('questions-container');
   if (!cont || !card) return;
   const beforeEl = beforeQ ? cardFor(beforeQ.id) : null;
-  if (beforeEl && beforeEl.parentElement === cont) beforeEl.after(card);
+  if (beforeEl && beforeEl.parentElement === cont) cont.insertBefore(card, beforeEl);
   else cont.appendChild(card);
 }
 
@@ -405,16 +497,16 @@ function hiddenQuestionIds(draft) {
   return out;
 }
 
-// ── Render del cuestionario por secciones (llamado desde main.js) ───────────
-// No reescribe renderAllQuestions: la llama primero (composición explícita) y
-// después aplica paginación, raíl, barra y paneles de estadísticas.
+// -- Render del cuestionario por secciones (llamado desde main.js) -----------
+// No reescribe renderAllQuestions: la llama primero (composición explí­cita) y
+// después aplica paginación, raí­l, barra y paneles de estadí­sticas.
 function renderSecciones() {
   renderAllQuestions();
   decorateSectionStats();
   applySectionPaging();
 }
 
-// Clampa el índice a una posición válida (preferentemente visible).
+// Clampa el í­ndice a una posición válida (preferentemente visible).
 function secClampIndex() {
   const n = Math.max(1, schema.length);
   SEC_ESTADO.idx = Math.min(Math.max(SEC_ESTADO.idx | 0, 0), n - 1);
@@ -437,8 +529,13 @@ function goToSection(i) {
   renderRail();
   renderBottomBar();
   // Al cambiar de sección se vuelve ARRIBA del todo (no al borde de la
-  // tarjeta), para que el raíl y la cabecera queden a la vista.
-  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
+  // tarjeta), para que el raí­l y la cabecera queden a la vista.
+  setTimeout(() => {
+    const active = $('sec-rail')?.querySelector('.sec-rail-item.active');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    const main = $('questions-container');
+    if (main) main.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 40);
 }
 
 function nextSection() {
@@ -471,6 +568,12 @@ function prevSection() {
 function applySectionPaging() {
   const container = $('questions-container');
   if (!container) return;
+  const participantsCard = $('participants-card');
+  const attendanceCard = $('ausencias-card');
+  const intro = !schema.length || SEC_ESTADO.idx === 0;
+  [participantsCard, attendanceCard].forEach(card => {
+    if (card) card.style.display = intro ? '' : 'none';
+  });
   if (!schema.length) { renderRail(); renderBottomBar(); return; }
   secClampIndex();
   const st = readState().answers;
@@ -479,7 +582,7 @@ function applySectionPaging() {
   let activeIds = null;
   if (cur) {
     // Preguntas visibles de la sección + su tarjeta «marca» SIEMPRE que el
-    // índice activo sea de esa misma sección (la marca no es una pregunta
+    // í­ndice activo sea de esa misma sección (la marca no es una pregunta
     // «visible» normal, pero es la página de las secciones sin preguntas).
     activeIds = new Set(_secItemsVisibles(cur, st).map(it => it.q.id));
     if (cur.encabezadoIdx >= 0 && _secDeIdx(SEC_ESTADO.idx, secs) === cur) {
@@ -505,7 +608,7 @@ function refreshSecciones() {
 // Cambios de esquema desde el servidor que afectan a las condiciones:
 //   · Una condición cuyo qid ya no existe se limpia (edit_pregunta) para no
 //     dejar secciones ocultas permanentemente por datos huérfanos.
-//   · Si la pregunta activa quedó oculta o eliminada, el raíl salta a la
+//   · Si la pregunta activa quedó oculta o eliminada, el raí­l salta a la
 //     primera visible.
 // Se llama desde polling.js cuando `schemaChanged` (los cambios locales pasan
 // por los flujos de questions.js/forms.js, que ya validan y refrescan).
@@ -531,13 +634,14 @@ function syncCondicionesTrasCambioEsquema() {
   refreshSecciones();
 }
 
-// ── Estado de respuesta de una pregunta (para el raíl ✓/○) ─────────────────
+// -- Estado de respuesta de una pregunta (para el raí­l âœ“/○) -----------------
 function _secHasAnswer(raw, tipo) {
   if (raw == null) return false;
   if (tipo === 'textarea') return true;
   if (Array.isArray(raw)) return raw.length > 0;
   if (tipo === 'disponibilidad') {
-    return !!(raw.rangos && raw.rangos.length) || !!raw.soloFinde || !!raw.meDaIgual ||
+    return !!(raw.rangos && raw.rangos.length) || !!(raw.preferencias && raw.preferencias.length) ||
+           !!raw.soloFinde || !!raw.soloEntreSemana || !!raw.meDaIgual ||
            !!raw.preferirPuente || !!raw.irYVenir || (raw.diasMax != null && raw.diasMax !== 5);
   }
   if (tipo === 'horarios') {
@@ -552,10 +656,10 @@ function _secHasAnswer(raw, tipo) {
   return String(raw).length > 0;
 }
 
-// ── Raíl de secciones ───────────────────────────────────────────────────────
-// El raíl pinta SECCIONES (agrupaciones de config.seccion), no preguntas:
-// cada entrada muestra el título de la sección, su estado global (✓ si todas
-// sus preguntas visibles están respondidas, ⌀ si ninguna aplica, ●/○ en otro
+// -- Raí­l de secciones -------------------------------------------------------
+// El raí­l pinta SECCIONES (agrupaciones de config.seccion), no preguntas:
+// cada entrada muestra el tí­tulo de la sección, su estado global (âœ“ si todas
+// sus preguntas visibles están respondidas, âŒ€ si ninguna aplica, ●/○ en otro
 // caso) y una sublista con las preguntas que contiene. Al pie: «+ Nueva
 // sección» y el ajuste «lo que responde el grupo».
 function renderRail() {
@@ -579,11 +683,11 @@ function renderRail() {
     const active = cur === sec;
     if (!allHidden) shownNum++;
 
-    const b = document.createElement('button');
-    b.type = 'button';
+    const b = document.createElement('div');
+    b.setAttribute('role', 'button'); b.tabIndex = 0;
     b.className = 'sec-rail-item' + (active ? ' active' : '') + (allHidden ? ' not-applicable' : '');
     b.setAttribute('aria-current', active ? 'step' : 'false');
-    const statusIcon = allHidden ? '⌀' : answered ? '✓' : active ? '●' : '○';
+    const statusIcon = allHidden ? '\u2205' : answered ? '\u2713' : active ? '\u25CF' : '\u25CB';
     const num = String(shownNum || 1).padStart(2, '0');
     b.innerHTML =
       `<span class="sec-rail-status" aria-hidden="true">${statusIcon}</span>` +
@@ -595,6 +699,74 @@ function renderRail() {
       const idx = _secPrimeraVisible(sec, st);
       if (idx >= 0) goToSection(idx);
     });
+    b.addEventListener('keydown', e => {
+      if (e.target !== b || !['Enter', ' '].includes(e.key)) return;
+      e.preventDefault(); b.click();
+    });
+
+    const tools = div('sec-rail-tools');
+    const rename = document.createElement('button');
+    rename.type = 'button'; rename.className = 'sec-rail-tool'; rename.textContent = '\u270E';
+    rename.title = 'Renombrar sección'; rename.setAttribute('aria-label', rename.title);
+    rename.addEventListener('click', e => {
+      e.stopPropagation();
+      if (tools.querySelector('.sec-rail-rename-form')) return;
+      const form = div('sec-rail-rename-form');
+      form.innerHTML = '<input type="text" maxlength="60" aria-label="Nuevo nombre de sección">' +
+        '<button type="button" class="sec-rail-tool" title="Guardar nombre">&#10003;</button>' +
+        '<button type="button" class="sec-rail-tool" title="Cancelar">&#215;</button>';
+      tools.appendChild(form);
+      const input = form.querySelector('input'); input.value = sec.titulo; input.focus(); input.select();
+      const close = () => form.remove();
+      form.querySelectorAll('button')[1].addEventListener('click', e2 => { e2.stopPropagation(); close(); });
+      form.querySelectorAll('button')[0].addEventListener('click', e2 => {
+        e2.stopPropagation(); renombrarSeccion(sec, input.value.trim());
+      });
+      input.addEventListener('keydown', e2 => {
+        if (e2.key === 'Enter') form.querySelectorAll('button')[0].click();
+        if (e2.key === 'Escape') close();
+      });
+    });
+    tools.appendChild(rename);
+    [[-1, '\u25B2', 'Subir sección'], [1, '\u25BC', 'Bajar sección']].forEach(([dir, glyph, title]) => {
+      const ctl = document.createElement('button');
+      ctl.type = 'button'; ctl.className = 'sec-rail-tool'; ctl.textContent = glyph;
+      ctl.title = title; ctl.setAttribute('aria-label', title);
+      ctl.disabled = (si === 0 && dir < 0) || (si === secs.length - 1 && dir > 0);
+      ctl.addEventListener('click', e => { e.stopPropagation(); moverSeccion(sec, si, Number(dir)); });
+      tools.appendChild(ctl);
+    });
+    if (sec.encabezadoIdx >= 0) {
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'sec-rail-tool sec-rail-delete'; del.textContent = '\u00D7';
+      del.title = 'Eliminar sección (conservar preguntas)'; del.setAttribute('aria-label', del.title);
+      del.addEventListener('click', e => { e.stopPropagation(); eliminarSeccion(sec); });
+      tools.appendChild(del);
+    }
+    const mergeChoices = secs.filter(other => other !== sec && (other.nombre || other.titulo));
+    if (mergeChoices.length) {
+      const merge = document.createElement('button');
+      merge.type = 'button'; merge.className = 'sec-rail-tool sec-rail-merge';
+      merge.textContent = '\u21C4'; merge.title = 'Combinar con otra sección';
+      merge.setAttribute('aria-label', merge.title);
+      merge.addEventListener('click', e => {
+        e.stopPropagation();
+        const select = document.createElement('select');
+        select.className = 'sec-rail-merge-select';
+        select.setAttribute('aria-label', `Combinar ${sec.titulo} con`);
+        select.innerHTML = '<option value="">Combinar con…</option>' +
+          mergeChoices.map((other, oi) => `<option value="${oi}">${esc(other.titulo)}</option>`).join('');
+        select.addEventListener('change', () => {
+          if (select.value === '') return;
+          const target = mergeChoices[Number(select.value)];
+          if (target) combinarSeccion(sec, target);
+          select.remove();
+        });
+        tools.appendChild(select); select.focus();
+      });
+      tools.appendChild(merge);
+    }
+    b.appendChild(tools);
 
     // Sublista de preguntas de la sección (navegación fina dentro de ella).
     if (items.length) {
@@ -618,9 +790,13 @@ function renderRail() {
   rail.appendChild(secGroupInfoRow());
 }
 
-// Botón «+ Nueva sección» del pie del raíl: pide un nombre de forma inline
-// (sin window.prompt) y crea una tarjeta «marca» (textarea informativa con
-// config.esEncabezado + config.seccion) que da identidad al grupo en el raíl.
+function railInsertAfter(anchor, node) {
+  const rail = $('sec-rail');
+  if (!rail || !node) return;
+  const groupInfo = rail.querySelector('.sec-groupinfo-row');
+  rail.insertBefore(node, groupInfo || null);
+}
+
 function secAddSectionButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -629,78 +805,172 @@ function secAddSectionButton() {
   btn.addEventListener('click', () => {
     btn.style.display = 'none';
     const form = div('sec-rail-add-form');
-    form.innerHTML =
-      '<input type="text" maxlength="60" placeholder="Nombre de la sección">' +
-      '<div class="sec-rail-add-actions">' +
-        '<button type="button" class="btn-pc sec-aa-cancel" type="button">Cancelar</button>' +
-        '<button type="button" class="btn-propose sec-aa-ok">Crear →</button>' +
-      '</div>';
+    form.innerHTML = '<input type="text" maxlength="60" placeholder="Nombre de la sección">' +
+      '<div class="sec-rail-add-actions"><button type="button" class="btn-pc sec-aa-cancel">Cancelar</button>' +
+      '<button type="button" class="btn-propose sec-aa-ok">Crear →</button></div>';
     railInsertAfter(btn, form);
-    const inp = form.querySelector('input');
-    inp.focus();
+    const input = form.querySelector('input'); input.focus();
     const close = () => { form.remove(); btn.style.display = ''; };
     form.querySelector('.sec-aa-cancel').addEventListener('click', close);
-    const crear = async () => {
-      const nombre = inp.value.trim();
-      if (!nombre) { inp.focus(); return; }
+    const create = async () => {
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      if (!user) { close(); showStatus('Inicia sesión para crear secciones.', 'err'); return; }
+      if (secNombreExiste(name)) { showStatus(`Ya existe una sección llamada «${name}».`, 'err'); return; }
       close();
-      await crearSeccion(nombre);
+      const id = 'seccion_' + name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) + '_' + Date.now().toString(36);
+      const q = { id, tipo: 'textarea', label: name, opciones: [], config: { esEncabezado: true, seccion: name, descripcion: '' } };
+      schema.push(q);
+      const card = buildQuestionCard(q, schema.length - 1);
+      $('questions-container')?.appendChild(card);
+      try {
+        await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta: q });
+        lastRaw = ''; await pollOnce();
+        if (typeof rebindAddQSeccion === 'function') rebindAddQSeccion();
+        refreshSecciones(); goToSectionDeNombre(name);
+        showStatus(`Sección «${name}» creada.`, 'ok', 3500);
+      } catch (e) {
+        card?.remove(); schema = schema.filter(item => item.id !== id);
+        showStatus('No se pudo crear la sección: ' + e.message, 'err', 6000);
+        refreshSecciones();
+      }
     };
-    form.querySelector('.sec-aa-ok').addEventListener('click', crear);
-    inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter') crear();
-      if (e.key === 'Escape') close();
-    });
+    form.querySelector('.sec-aa-ok').addEventListener('click', create);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') create(); if (e.key === 'Escape') close(); });
   });
   return btn;
 }
-function railInsertAfter(anchor, node) {
-  const rail = $('sec-rail');
-  if (!rail) return;
-  const groupinfo = rail.querySelector('.sec-groupinfo-row');
-  if (groupinfo) rail.insertBefore(node, groupinfo);
-  else rail.appendChild(node);
+
+async function persistSectionOrder(ordered) {
+  if (!user) throw new Error('La sesión ha caducado. Inicia sesión de nuevo.');
+  const ids = ordered.map(q => q.id);
+  await apiAuth({ action: 'reordenar_preguntas', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, ids });
+  schema = ordered;
+  const cont = $('questions-container');
+  if (cont) ordered.forEach(q => { const card = cardFor(q.id); if (card) cont.appendChild(card); });
+  renumberCards(); lastRaw = ''; refreshSecciones();
 }
 
-// Crea la tarjeta «marca» de una sección nueva (optimista + add_pregunta).
-async function crearSeccion(nombre) {
-  if (!user) { showStatus('Inicia sesión para crear secciones', 'err'); return; }
-  const id = 'seccion_' + nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) + '_' + Date.now().toString(36);
-  const pregunta = { id, tipo: 'textarea', label: nombre, opciones: [],
-                     config: { esEncabezado: true, seccion: nombre, descripcion: '' } };
-  schema.push(pregunta);
-  const card = buildQuestionCard(pregunta, schema.length - 1);
-  const cont = $('questions-container');
-  if (card && cont) {
-    // Colocar la marca justo antes de la primera pregunta ya asignada a esta
-    // sección (si existe), para que DOM y esquema queden alineados.
-    const key = String(nombre).trim().toLowerCase();
-    const firstInSec = schema.find(x => x.id !== id && x.config && !x.config.esEncabezado &&
-      String(x.config.seccion || '').trim().toLowerCase() === key);
-    if (firstInSec) insertCardTras(card, firstInSec);
-    else cont.appendChild(card);
+async function colocarPreguntaEnSeccion(qid, nombre) {
+  if (!nombre) return true;
+  const q = schema.find(item => item.id === qid);
+  const section = seccionesDelEsquema().find(s => _secNormNombre(s.nombre || s.titulo) === _secNormNombre(nombre));
+  if (!q || !section) return false;
+  const header = section.encabezadoIdx >= 0 ? schema[section.encabezadoIdx] : null;
+  const sectionQuestions = section.items
+    .filter(it => it.q.id !== qid && it.q !== header)
+    .map(it => it.q);
+  const memberIds = new Set([...sectionQuestions, ...(header ? [header] : []), q].map(item => item.id));
+  const firstSectionIndex = schema.findIndex(item => memberIds.has(item.id));
+  const ordered = schema.filter(item => !memberIds.has(item.id));
+  const insertAt = schema.slice(0, Math.max(0, firstSectionIndex)).filter(item => !memberIds.has(item.id)).length;
+  // Repara grupos antiguos: encabezado primero, y preguntas del grupo juntas.
+  const sectionBlock = [...(header ? [header] : []), ...sectionQuestions, q];
+  ordered.splice(insertAt, 0, ...sectionBlock);
+  const positions = new Map(ordered.map((item, i) => [item.id, i]));
+  for (const item of ordered) {
+    const sourceId = item.config?.mostrarSi?.qid;
+    if (sourceId && positions.has(sourceId) && positions.get(sourceId) >= positions.get(item.id)) {
+      showStatus('No se pudo colocar la pregunta junto a esa sección porque rompería una dependencia condicional.', 'err', 6500);
+      return false;
+    }
   }
-  const emptyNotice = cont && cont.querySelector('[data-empty-notice]');
-  if (emptyNotice) emptyNotice.remove();
+  await persistSectionOrder(ordered);
+  return true;
+}
+
+async function moverSeccion(sec, index, delta) {
+  const sections = seccionesDelEsquema(), targetIndex = index + delta;
+  if (!user || targetIndex < 0 || targetIndex >= sections.length) return;
+  const reordered = sections.slice();
+  [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+  const ids = reordered.flatMap(s => s.items.map(it => it.q.id));
+  const byId = new Map(schema.map(q => [q.id, q]));
+  const ordered = ids.map(id => byId.get(id)).filter(Boolean);
+  const pos = new Map(ordered.map((q, i) => [q.id, i]));
+  for (const q of ordered) {
+    const dep = q.config?.mostrarSi?.qid;
+    if (dep && pos.has(dep) && pos.get(dep) >= pos.get(q.id)) {
+      showStatus(`No se puede mover la sección: «${q.label}» depende de una pregunta que quedaría detrás.`, 'err', 6000);
+      return;
+    }
+  }
+  try { await persistSectionOrder(ordered); }
+  catch (e) { showStatus('No se pudo reordenar la sección: ' + e.message, 'err', 6000); }
+}
+
+async function eliminarSeccion(sec) {
+  if (!user || sec.encabezadoIdx < 0) return;
+  const header = schema[sec.encabezadoIdx];
   try {
-    await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre,
-                    pinHash: user.pinHash, pregunta });
-    lastRaw = '';
-    await pollOnce();
-    // Navegar a la sección nueva tras el guardado real (usa el índice fresco
-    // del esquema sincronizado). Aunque todavía no tenga preguntas visibles,
-    // la tarjeta «marca» es suficiente para navegar hasta ella.
-    if (typeof goToSectionDeNombre === 'function') goToSectionDeNombre(nombre);
-    else refreshSecciones();
-    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
-    showStatus(`Sección «${nombre}» creada. Añade preguntas y asígnalas desde ✎.`, 'ok', 6000);
+    for (const { q } of sec.items) {
+      if (q === header) continue;
+      const config = { ...(q.config || {}) }; delete config.seccion;
+      await apiAuth({ action: 'edit_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, config });
+      q.config = config;
+    }
+    await apiAuth({ action: 'delete_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: header.id });
+    schema = schema.filter(q => q.id !== header.id); cardFor(header.id)?.remove();
+    lastRaw = ''; await pollOnce(); refreshSecciones();
+    showStatus(`Sección «${sec.titulo}» eliminada; se conservaron sus preguntas.`, 'ok', 4000);
   } catch (e) {
-    if (card) card.remove();
-    const i = schema.indexOf(pregunta);
-    if (i >= 0) schema.splice(i, 1);
-    showStatus('No se pudo crear la sección: ' + e.message, 'err');
-    refreshSecciones();
+    lastRaw = ''; await pollOnce(); refreshSecciones();
+    showStatus('No se pudo eliminar la sección: ' + e.message, 'err', 7000);
+  }
+}
+
+async function combinarSeccion(source, target) {
+  if (!user || source === target) return;
+  const name = target.nombre || target.titulo;
+  const sourceHeader = source.encabezadoIdx >= 0 ? schema[source.encabezadoIdx] : null;
+  try {
+    for (const { q } of source.items) {
+      if (q === sourceHeader) continue;
+      const config = { ...(q.config || {}), seccion: name };
+      await apiAuth({ action: 'edit_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, config });
+      q.config = config;
+    }
+    if (sourceHeader) {
+      await apiAuth({ action: 'delete_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: sourceHeader.id });
+      schema = schema.filter(q => q.id !== sourceHeader.id); cardFor(sourceHeader.id)?.remove();
+    }
+    lastRaw = ''; await pollOnce(); refreshSecciones();
+    showStatus(`Sección combinada con «${name}».`, 'ok', 3500);
+  } catch (e) {
+    lastRaw = ''; await pollOnce(); refreshSecciones();
+    showStatus('No se pudo combinar la sección: ' + e.message, 'err', 7000);
+  }
+}
+
+async function renombrarSeccion(sec, nombre) {
+  if (!user || !nombre) return;
+  const memberIds = new Set(sec.items.map(it => it.q.id));
+  const conflict = seccionesDelEsquema().find(other =>
+    !other.items.some(it => memberIds.has(it.q.id)) &&
+    _secNormNombre(other.nombre || other.titulo) === _secNormNombre(nombre));
+  if (conflict) {
+    showStatus(`Ya existe «${conflict.titulo}». Usa «Combinar» para unir ambas secciones.`, 'err', 5000);
+    return;
+  }
+  const header = sec.encabezadoIdx >= 0 ? schema[sec.encabezadoIdx] : null;
+  try {
+    for (const { q } of sec.items) {
+      const config = { ...(q.config || {}), seccion: nombre };
+      if (q === header) config.esEncabezado = true;
+      await apiAuth({ action: 'edit_pregunta', eid: user.eid, nombre: user.nombre,
+        pinHash: user.pinHash, questionId: q.id,
+        ...(q === header ? { label: nombre } : {}), config });
+    }
+
+
+    if (!header) await crearEncabezadoParaSeccion(nombre, sec.items);
+    lastRaw = ''; await pollOnce(); refreshSecciones();
+    if (typeof rebindAddQSeccion === 'function') rebindAddQSeccion();
+    showStatus(`Sección renombrada a «${nombre}».`, 'ok', 3000);
+  } catch (e) {
+    showStatus('No se pudo renombrar la sección: ' + e.message + '. Actualiza los datos si solo se cambió una parte.', 'err', 7000);
+    pollOnce();
   }
 }
 
@@ -720,8 +990,8 @@ function secGroupInfoRow() {
   return row;
 }
 
-// ── Barra inferior fija: Anterior · sección n/N · Siguiente · Enviar ───────
-// La unidad de navegación es la SECCIÓN (agrupación de config.seccion), no la
+// -- Barra inferior fija: Anterior · sección n/N · Siguiente · Enviar -------
+// La unidad de navegación es la SECCIí“N (agrupación de config.seccion), no la
 // pregunta: «2 de 5» cuenta secciones con contenido aplicable.
 function renderBottomBar() {
   const bar = $('sec-nav');
@@ -752,7 +1022,7 @@ function renderBottomBar() {
   syncSubmitBar();
 }
 
-// ── Panel «Lo que responde el grupo» bajo cada sección ─────────────────────
+// -- Panel «Lo que responde el grupo» bajo cada sección ---------------------
 function decorateSectionStats() {
   const container = $('questions-container');
   if (!container) return;
@@ -794,8 +1064,8 @@ function decorateSectionStats() {
   });
 }
 
-// Pinta las estadísticas del grupo de UNA pregunta (usa el motor del
-// reformulario vía su override de sección única, sin parchearlo).
+// Pinta las estadí­sticas del grupo de UNA pregunta (usa el motor del
+// reformulario ví­a su override de sección única, sin parchearlo).
 let _secStatsTimer = null;
 function renderReformSectionFor(qid, myAnsPre) {
   const box = $('reform-section-' + qid);
@@ -810,16 +1080,16 @@ function renderReformSectionFor(qid, myAnsPre) {
       card.classList.add('ref-card-embedded');
       box.appendChild(card);
     } else {
-      box.innerHTML = '<div class="reform-stats-empty">Tipo de pregunta sin estadísticas disponibles todavía.</div>';
+      box.innerHTML = '<div class="reform-stats-empty">Tipo de pregunta sin estadí­sticas disponibles todaví­a.</div>';
     }
   } catch (e) {
-    console.warn('No se pudieron calcular las estadísticas de', qid, e);
+    console.warn('No se pudieron calcular las estadí­sticas de', qid, e);
     box.innerHTML = '';
   }
 }
 
-// Repinta los paneles de estadísticas de forma agrupada (debounced) cuando
-// llegan datos nuevos (polling, envíos, cambios de esquema…).
+// Repinta los paneles de estadí­sticas de forma agrupada (debounced) cuando
+// llegan datos nuevos (polling, enví­os, cambios de esquema…).
 function scheduleRefreshSections() {
   clearTimeout(_secStatsTimer);
   _secStatsTimer = setTimeout(() => {
@@ -830,16 +1100,16 @@ function scheduleRefreshSections() {
 // Barras flotantes: solo existe la barra inferior del cuestionario.
 function updateFloatingBars() {
   const nav = $('sec-nav');
-  if (nav) nav.classList.toggle('visible', activeMode === 'survey' && schema.length > 0);
+  if (nav) nav.classList.toggle('visible', activeMode === 'survey');
 }
 
-// ── Enlazado (se llama una vez desde main.js, en DOMContentLoaded) ─────────
+// -- Enlazado (se llama una vez desde main.js, en DOMContentLoaded) ---------
 function initSecciones() {
   const prev = $('sec-prev'), next = $('sec-next');
   if (prev) prev.addEventListener('click', prevSection);
   if (next) next.addEventListener('click', nextSection);
-  // El envío (#sec-submit) se enlaza en bindSubmit() (answers.js), que es el
-  // dueño del flujo; aquí solo la navegación y el ajuste de información.
+  // El enví­o (#sec-submit) se enlaza en bindSubmit() (answers.js), que es el
+  // dueño del flujo; aquí­ solo la navegación y el ajuste de información.
 
   const sel = $('sec-groupinfo-mode');
   if (sel) {
@@ -847,7 +1117,7 @@ function initSecciones() {
     sel.addEventListener('change', () => setGroupInfoMode(sel.value));
   }
 
-  // Teclado: ← → para navegar entre secciones.
+  // Teclado: â† → para navegar entre secciones.
   document.addEventListener('keydown', e => {
     if (activeMode !== 'survey' || !schema.length) return;
     const t = e.target;
