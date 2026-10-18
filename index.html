@@ -161,14 +161,16 @@
          en pantallas estrechas). Lo rellena renderRail() en secciones.js. -->
     <nav id="sec-rail" class="sec-rail" aria-label="Secciones del cuestionario"></nav>
 
-    <section class="card" id="participants-card">
-      <div class="card-title"><span class="num"><i class="fa-solid fa-users" aria-hidden="true"></i></span> Participantes y votantes</div>
-      <p class="participants-note">Personas registradas en el viaje y quiénes ya han enviado su respuesta.</p>
-      <div id="participants-list" class="participants-list" aria-live="polite"></div>
-    </section>
-
     <!-- COLUMNA PRINCIPAL: una sola sección visible cada vez (máx. 720 px) -->
     <main class="sec-main">
+      <!-- Participantes: dentro de la columna principal para que la tarjeta
+           quede en la celda correcta de la cuadrícula de .form-wrap. -->
+      <section class="card" id="participants-card">
+        <div class="card-title"><span class="num"><i class="fa-solid fa-users" aria-hidden="true"></i></span> Participantes y votantes</div>
+        <p class="participants-note">Personas registradas en el viaje y quiénes ya han enviado su respuesta.</p>
+        <div id="participants-list" class="participants-list" aria-live="polite"></div>
+      </section>
+
       <div id="questions-container" style="display:flex;flex-direction:column;gap:24px"></div>
 
       <!-- PROPONER NUEVA SECCIÓN -->

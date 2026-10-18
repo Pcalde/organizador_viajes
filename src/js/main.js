@@ -14,7 +14,9 @@ function switchMode(mode) {
   const vConsensus = $('view-consensus');
   const vDebate    = $('view-debate');
 
-  if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
+  // Nota: debe ser 'grid' (no 'flex'); el valor inline anterior rompía la
+  // cuadrícula de .form-wrap (raíl + columna principal) definida en styles.css.
+  if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'grid'  : 'none';
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
