@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -10,16 +10,16 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="src/css/styles.css">
+  <link rel="stylesheet" href="src/css/styles.css?v=6">
 </head>
 <body>
 
-<!-- ═══════════════════════════ LOGIN / CREACIÓN ═════════════════════════ -->
+<!-- ═══════════════════════════ LOGIN / CREACIí“N ═════════════════════════ -->
 <div id="login-screen">
   <div class="login-wrap">
     <header>
       <h1>Cuestionador</h1>
-      <p style="margin-top:12px;color:var(--muted);font-size:0.95rem">Únete a la encuesta de tu grupo o crea un nuevo viaje</p>
+      <p style="margin-top:12px;color:var(--muted);font-size:0.95rem">íšnete a la encuesta de tu grupo o crea un nuevo viaje</p>
     </header>
     <div class="card">
       <!-- Conmutador Entrar vs Crear -->
@@ -33,7 +33,7 @@
         <input type="text" id="login-nombre" placeholder="Como quieres aparecer en el grupo" autocomplete="name" maxlength="40">
       </div>
       <div class="login-field">
-        <label for="login-pin">Contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4–8 dígitos o letras, solo tú lo sabes)</span></label>
+        <label for="login-pin">Contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4-8 dí­gitos o letras, solo tú lo sabes)</span></label>
         <input type="password" id="login-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="current-password">
       </div>
       <div class="login-field">
@@ -48,14 +48,14 @@
       <!-- Campos extra solo al crear nuevo viaje -->
       <div id="create-trip-fields" style="display:none;flex-direction:column;gap:14px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">
         <div class="login-field" style="margin-bottom:0">
-          <label for="login-titulo">Título del viaje</label>
+          <label for="login-titulo">Tí­tulo del viaje</label>
           <input type="text" id="login-titulo" placeholder="p.ej. Escapada Rural Diciembre" maxlength="80">
         </div>
         <div class="login-field" style="margin-bottom:0">
           <label for="login-plantilla">Plantilla inicial de preguntas</label>
           <select id="login-plantilla">
             <option value="vacia"> En blanco (0 preguntas, crear todo a medida)</option>
-            <option value="minima"> Viaje mínimo (Disponibilidad + Presupuesto + Notas)</option>
+            <option value="minima"> Viaje mí­nimo (Disponibilidad + Presupuesto + Notas)</option>
             <option value="completa"> Completa de viaje (Plan, Casas, Precio, Transporte, Fechas, Notas)</option>
             <option value="quedada"> Quedada (plan, horarios por franjas, transporte, presupuesto)</option>
           </select>
@@ -69,19 +69,19 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════ SURVEY & POST-SURVEY ═════════════════════ -->
+<!-- ═══════════════════════════ SURVEY & POST-SURVEY ═════════════════════ -->
 <div id="survey-screen" style="display:none">
   <header>
     <h1>Cuestionario de <em>vacas</em></h1>
     <div class="user-tag" id="user-tag">
-      <span id="utag-nombre">—</span>
+      <span id="utag-nombre">-</span>
       <span class="eid" id="utag-eid"></span>
       <span class="poll-dot" id="poll-dot" title="Sincronización activa"></span>
       <button class="btn-logout" id="btn-logout" title="Cerrar sesión">✕</button>
     </div>
   </header>
 
-  <!-- NAVEGACIÓN LATERAL DESPLEGABLE (hamburguesa) -->
+  <!-- NAVEGACIí“N LATERAL DESPLEGABLE (hamburguesa) -->
   <div class="side-nav" id="side-nav">
     <button type="button" class="side-nav-toggle" id="side-nav-toggle" aria-label="Abrir menú" aria-expanded="false">
       <span class="hamburger"></span>
@@ -121,7 +121,7 @@
     </nav>
   </div>
 
-  <!-- ── MODAL DE CUENTA (nombre, contraseña, punto de partida) ─────────── -->
+  <!-- -- MODAL DE CUENTA (nombre, contraseña, punto de partida) ----------- -->
   <div class="map-modal-backdrop" id="account-modal-backdrop" hidden>
     <div class="map-modal map-modal-sm" role="dialog" aria-modal="true" aria-label="Mi cuenta">
       <div class="map-modal-head">
@@ -134,11 +134,11 @@
           <input type="text" id="acc-nombre" maxlength="40" autocomplete="name">
         </div>
         <div class="login-field">
-          <label for="acc-pin">Nueva contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(opcional — deja vacío para no cambiarla)</span></label>
+          <label for="acc-pin">Nueva contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(opcional - deja vací­o para no cambiarla)</span></label>
           <input type="password" id="acc-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="new-password">
         </div>
         <div class="login-field">
-          <label for="acc-partida">¿Desde dónde sales el día del viaje? <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(dirección, ciudad o «lat,lng» — se usa en el mapa para calcular distancias)</span></label>
+          <label for="acc-partida">¿Desde dónde sales el dí­a del viaje? <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(dirección, ciudad o «lat,lng» - se usa en el mapa para calcular distancias)</span></label>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <input type="text" id="acc-partida" placeholder="p.ej. Calle Mayor 1, Madrid" style="flex:1;min-width:180px">
             <button type="button" class="btn-pc" id="acc-partida-geo" title="Usar mi ubicación actual"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i></button>
@@ -154,18 +154,17 @@
 
   <div id="gas-status" style="max-width:880px;margin:0 auto 18px"></div>
 
-  <!-- ── VISTA 1: ENCUESTA INDIVIDUAL (por secciones, secciones.js) ────── -->
+  <!-- -- VISTA 1: ENCUESTA INDIVIDUAL (por secciones, secciones.js) ------ -->
   <div class="form-wrap" id="view-survey">
 
-    <!-- RAÍL DE SECCIONES: siempre visible a la izquierda (chips horizontales
+    <!-- RAíL DE SECCIONES: siempre visible a la izquierda (chips horizontales
          en pantallas estrechas). Lo rellena renderRail() en secciones.js. -->
     <nav id="sec-rail" class="sec-rail" aria-label="Secciones del cuestionario"></nav>
 
     <!-- COLUMNA PRINCIPAL: una sola sección visible cada vez (máx. 720 px) -->
     <main class="sec-main">
-      <!-- Participantes: dentro de la columna principal para que la tarjeta
-           quede en la celda correcta de la cuadrícula de .form-wrap. -->
-      <section class="card" id="participants-card">
+      <!-- Resumen inicial: solo se muestra en la portada del cuestionario. -->
+      <section class="card survey-intro-card" id="participants-card">
         <div class="card-title"><span class="num"><i class="fa-solid fa-users" aria-hidden="true"></i></span> Participantes y votantes</div>
         <p class="participants-note">Personas registradas en el viaje y quiénes ya han enviado su respuesta.</p>
         <div id="participants-list" class="participants-list" aria-live="polite"></div>
@@ -173,7 +172,7 @@
 
       <div id="questions-container" style="display:flex;flex-direction:column;gap:24px"></div>
 
-      <!-- PROPONER NUEVA SECCIÓN -->
+      <!-- PROPONER NUEVA SECCIí“N -->
       <div class="card" id="add-question-card">
         <div class="card-title"><span class="num">+</span> Ampliar el cuestionario</div>
         <button class="add-opt-trigger" id="btn-toggle-add-q" type="button">+ Proponer una nueva pregunta al grupo</button>
@@ -197,7 +196,7 @@
           </div>
           <!-- Sección: el desplegable lo rellena forms.js con nombresDeSecciones() -->
           <div class="add-q-field" id="add-q-seccion-wrap">
-            <label>Sección (agrupa esta pregunta en el raíl)</label>
+            <label>Sección (puedes elegir una existente o crear otra)</label>
             <select id="add-q-seccion"></select>
             <input type="text" id="add-q-seccion-nombre" maxlength="60"
                    placeholder="Nombre de la sección nueva…" style="display:none;margin-top:6px">
@@ -215,7 +214,7 @@
           <div id="add-q-slider-wrap" style="display:none" class="add-q-field">
             <label>Configuración del rango</label>
             <div class="slider-config">
-              <div><label>Mínimo</label><input type="number" id="aq-min" value="0"></div>
+              <div><label>Mí­nimo</label><input type="number" id="aq-min" value="0"></div>
               <div><label>Máximo</label><input type="number" id="aq-max" value="100"></div>
               <div><label>Paso</label><input type="number" id="aq-step" value="10"></div>
             </div>
@@ -232,14 +231,14 @@
           <button class="btn-propose" type="button" id="btn-submit-new-q">Proponer al grupo →</button>
           <div class="add-q-field">
             <label>Descripción (opcional)</label>
-            <textarea id="add-q-desc" rows="2" maxlength="500" placeholder="Texto explicativo bajo el título…"></textarea>
+            <textarea id="add-q-desc" rows="2" maxlength="500" placeholder="Texto explicativo bajo el tí­tulo…"></textarea>
           </div>
         </div>
       </div>
 
       <!-- AUSENCIAS -->
-      <div class="card" id="ausencias-card" style="display:none">
-        <div class="card-title"><span class="num">👥</span> Probabilidades de asistencia</div>
+      <div class="card survey-intro-card" id="ausencias-card" style="display:none">
+        <div class="card-title"><span class="num"><i class="fa-solid fa-chart-line"></i></span> Probabilidades de asistencia</div>
         <p class="aus-note">Los votos son públicos y alimentan la simulación Monte Carlo de resiliencia del viaje.</p>
         <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">¿Quién crees que es más probable que se caiga del plan? <span style="font-size:0.78rem">(puedes votarte a ti mismo)</span></div>
         <div class="options-list" id="aus-respondentes-list"></div>
@@ -257,7 +256,7 @@
     </main><!-- /sec-main -->
 
     <!-- BARRA INFERIOR FIJA: navegación por secciones + estado de sincronización.
-         El botón #sec-submit delega en el flujo de envío de answers.js;
+         El botón #sec-submit delega en el flujo de enví­o de answers.js;
          #btn-generate queda oculto pero sigue siendo el "motor" del estado. -->
     <div class="sec-nav" id="sec-nav">
       <div class="sec-progress" aria-hidden="true"><span class="sec-bar-fill" id="sec-bar-fill"></span></div>
@@ -277,23 +276,23 @@
 
   </div><!-- /view-survey -->
 
-  <!-- ── MODAL DEL MAPA (se abre desde el botón 🗺️ de las preguntas con destinos) ── -->
+  <!-- -- MODAL DEL MAPA (se abre desde el botón <i class="fa-solid fa-map-location"></i> de las preguntas con destinos) -- -->
   <div class="map-modal-backdrop" id="map-modal-backdrop" hidden>
     <div class="map-modal" role="dialog" aria-modal="true" aria-label="Mapa de destinos">
       <div class="map-modal-head">
-        <strong>🗺️ Mapa de destinos</strong>
+        <strong><i class="fa-solid fa-map-location"></i> Mapa de destinos</strong>
         <button type="button" class="map-modal-close" id="map-modal-close" aria-label="Cerrar mapa">✕</button>
       </div>
       <div class="map-modal-body wide-wrap" id="map-modal-body"></div>
     </div>
   </div>
 
-  <!-- ── VISTA 3: CONSENSO, FACTIBILIDAD Y REFORMULARIO ───────────────── -->
+  <!-- -- VISTA 3: CONSENSO, FACTIBILIDAD Y REFORMULARIO ----------------- -->
   <div class="wide-wrap" id="view-consensus" style="display:none">
     <div id="consensus-container" style="display:flex;flex-direction:column;gap:20px"></div>
   </div>
 
-  <!-- ── VISTA 3: SALA DE DEBATE (DIFERIDO + DIRECTO) ─────────────────── -->
+  <!-- -- VISTA 3: SALA DE DEBATE (DIFERIDO + DIRECTO) ------------------- -->
   <div class="wide-wrap" id="view-debate" style="display:none">
     <div id="debate-container"></div>
   </div>
@@ -302,21 +301,21 @@
 
 <script src="src/js/config.js"></script>
 <script src="src/js/crypto.js"></script>
-<script src="src/js/api.js"></script>
-<script src="src/js/state.js"></script>
+<script src="src/js/api.js?v=2"></script>
+<script src="src/js/state.js?v=2"></script>
 <script src="src/js/participants.js"></script>
 <script src="src/js/sesion.js"></script>
-<script src="src/js/types.js"></script>
-<script src="src/js/questions.js"></script>
+<script src="src/js/types.js?v=4"></script>
+<script src="src/js/questions.js?v=5"></script>
 <script src="src/js/proscontras.js"></script>
 <script src="src/js/ausencias.js"></script>
-<script src="src/js/forms.js"></script>
-<script src="src/js/answers.js"></script>
-<script src="src/js/reformulario.js"></script>
-<!-- Cuestionario por secciones (raíl, barra inferior, condiciones «mostrarSi»):
-     módulo con funciones EXPLÍCITAS llamado desde main.js y enterSurvey().
+<script src="src/js/forms.js?v=4"></script>
+<script src="src/js/answers.js?v=2"></script>
+<script src="src/js/reformulario.js?v=2"></script>
+<!-- Cuestionario por secciones (raí­l, barra inferior, condiciones «mostrarSi»):
+     módulo con funciones EXPLíCITAS llamado desde main.js y enterSurvey().
      Sin monkeypatching; sustituye al antiguo wizard.js. -->
-<script src="src/js/secciones.js?v=2"></script>
+<script src="src/js/secciones.js?v=14"></script>
 <script src="src/js/mapa.js"></script>
 <script src="src/js/cuenta.js"></script>
 <script src="src/js/debate.js"></script>
