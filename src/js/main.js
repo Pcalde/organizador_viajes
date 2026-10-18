@@ -18,9 +18,11 @@ function switchMode(mode) {
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
-  // La barra flotante de envío solo acompaña en la vista del cuestionario
+  // Las barras flotantes de envío solo acompañan en la vista del cuestionario
   const fab = $('submit-fab');
   if (fab) fab.classList.toggle('visible', mode === 'survey');
+  const wizbar = $('wiz-nav');
+  if (wizbar) wizbar.classList.toggle('visible', mode === 'survey');
 
   if (typeof applyWizardPaging === 'function') applyWizardPaging();
   if (typeof updateWizNav === 'function')      updateWizNav();

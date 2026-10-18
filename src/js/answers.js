@@ -10,6 +10,18 @@ function updateSubmitBtnLabel() {
   if (!btn || btn.disabled) return; // no pisar el texto transitorio "Enviando…"
   btn.textContent = draftDirty ? 'Actualizar respuesta →' : '✓ Todo al día';
   btn.classList.toggle('up-to-date', !draftDirty);
+  syncFabClone();
+}
+
+// El botón de envío vive ahora en una barra fija que acompaña al usuario
+// durante el scroll. wizard.js mantiene #btn-generate-fab (clon flotante,
+// visible cuando la barra del asistente está oculta) sincronizado con él.
+function syncFabClone() {
+  const btn = $('btn-generate'), fab = $('btn-generate-fab');
+  if (!btn || !fab) return;
+  fab.textContent = btn.textContent;
+  fab.disabled = btn.disabled;
+  fab.classList.toggle('up-to-date', btn.classList.contains('up-to-date'));
 }
 
 function setDraftDirty(isDirty) {
@@ -144,13 +156,18 @@ function validarRespuestas() {
 async function enviarRespuesta(silent = false) {
   if (!user) return;
   const btn = $('btn-generate');
+  const fab = $('btn-generate-fab');
+
+  // Si se pulsa el clon flotante, trabajar con él como botón activo
+  const active = (btn && !btn.disabled) ? btn : (fab || btn);
 
   const err = validarRespuestas();
   if (err) { showStatus(err, 'err', 8000); return; }
 
-  if (btn && !silent) {
-    btn.disabled = true;
-    btn.textContent = 'Enviando…';
+  if (active && !silent) {
+    if (btn) btn.disabled = true;
+    if (fab) fab.disabled = true;
+    if (active.textContent !== 'Enviando…') active.textContent = 'Enviando…';
   }
   try {
     const answers = collectAnswers();
@@ -179,7 +196,7 @@ async function enviarRespuesta(silent = false) {
   } finally {
     if (btn && !silent) {
       btn.disabled = false;
-      updateSubmitBtnLabel(); // "✓ Todo al día" tras sincronizar
+      updateSubmitBtnLabel(); // "✓ Todo al día" tras sincronizar (incluye el clon flotante)
     }
   }
 }

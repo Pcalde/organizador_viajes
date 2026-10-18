@@ -172,10 +172,13 @@ function buildQuestionCard(q, idx) {
 }
 
 function renumberCards() {
-  document.querySelectorAll('#questions-container > .card').forEach((c, i) => {
-    const num = c.querySelector('.card-title .num');
-    if (num) num.textContent = i + 1;
-  });
+  document.querySelectorAll('#questions-container > .card')
+    .forEach(c => { if (!c.dataset.emptyNotice) c.hidden = false; });
+  document.querySelectorAll('#questions-container > .card:not([data-empty-notice])')
+    .forEach((c, i) => {
+      const num = c.querySelector('.card-title .num');
+      if (num) num.textContent = i + 1;
+    });
 }
 
 function renderAllQuestions() {
