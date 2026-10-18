@@ -231,4 +231,7 @@ function patchSingleAnswer(qid, newVal) {
 function bindSubmit() {
   const btn = $('btn-generate');
   if (btn) btn.addEventListener('click', () => enviarRespuesta(false));
+  // El clon flotante #btn-generate-fab debe funcionar igual que el original
+  const fab = $('btn-generate-fab');
+  if (fab) fab.addEventListener('click', () => enviarRespuesta(false));
 }
