@@ -8,8 +8,10 @@ create extension if not exists pgcrypto with schema extensions;
 -- ── TABLAS ─────────────────────────────────────────────────────────────────
 create table if not exists encuestas (
   eid    text primary key check (eid ~ '^[a-z0-9-]{1,60}$'),
+  titulo text not null default 'Cuestionario de viaje',
   creada timestamptz not null default now()
 );
+alter table encuestas add column if not exists titulo text not null default 'Cuestionario de viaje';
 
 create table if not exists usuarios (
   eid      text not null references encuestas on delete cascade,
@@ -32,7 +34,7 @@ create table if not exists preguntas (
   eid      text not null references encuestas on delete cascade,
   id       text not null check (id ~ '^[a-z0-9_-]{1,80}$'),
   tipo     text not null check (tipo in
-             ('checkbox','voto-ponderado','radio','casas','slider','disponibilidad','textarea')),
+             ('checkbox','voto-ponderado','radio','casas','slider','disponibilidad','horarios','textarea')),
   label    text not null check (char_length(label) between 1 and 200),
   opciones jsonb not null default '[]',
   config   jsonb not null default '{}',
@@ -47,6 +49,12 @@ with orden_inicial as (
   from preguntas where pos is null
 )
 update preguntas p set pos = o.n from orden_inicial o where p.eid = o.eid and p.id = o.id;
+
+-- El CHECK de la tabla solo se evalúa en INSERT/UPDATE, así que las plantillas
+-- nuevas (p.ej. 'horarios') funcionan sin migración tras ejecutar este script.
+alter table preguntas drop constraint if exists preguntas_tipo_check;
+alter table preguntas add constraint preguntas_tipo_check check (tipo in
+  ('checkbox','voto-ponderado','radio','casas','slider','disponibilidad','horarios','textarea'));
 
 create table if not exists respuestas (
   eid     text not null references encuestas on delete cascade,
@@ -104,6 +112,67 @@ language sql immutable as $$
   end
 $$;
 
+-- Sanitizador único de opciones: preserva foto/geo y valida coordenadas.
+-- Las opciones admiten dos formas: string simple u objeto enriquecido
+-- {nombre, precio, url, foto, geo:{texto,lat,lng}}. Antes add_opcion y
+-- add_pregunta reconstruían el objeto con una lista fija de campos y
+-- descartaban `foto` y `geo`, por lo que el punto del mapa se perdía al
+-- sondear el servidor. Esta función es la única autoridad sobre qué campos
+-- sobreviven al guardar.
+create or replace function _san_opcion(p_tipo text, o jsonb) returns jsonb
+language plpgsql immutable as $$
+declare g jsonb; out jsonb; t text;
+begin
+  -- Forma string: se conserva tal cual si no está vacía.
+  if jsonb_typeof(o) = 'string' then
+    return case when btrim(o #>> '{}') <> '' then o else null end;
+  end if;
+  if jsonb_typeof(o) <> 'object' then return null; end if;
+  t := btrim(coalesce(o->>'nombre', ''));
+  if t = '' then return null; end if;
+
+  out := jsonb_build_object('nombre', t, 'precio', coalesce(o->>'precio', ''));
+
+  -- URL y FOTO: solo https/http válidas; si no, cadena vacía (el cliente
+  -- usa safeUrl igualmente; así no se pierde el campo en el JSON).
+  if coalesce(o->>'url', '')  ~* '^https?://' then
+    out := jsonb_build_object('nombre', t, 'precio', coalesce(o->>'precio',''),
+                              'url',  left(o->>'url', 400));
+  end if;
+  if coalesce(o->>'foto', '') ~* '^https?://' then
+    out := out || jsonb_build_object('foto', left(o->>'foto', 400));
+  end if;
+
+  -- GEO: objeto {texto, lat, lng}. Se aceptan coordenadas numéricas válidas
+  -- (lat -90..90, lng -180..180) y/o un texto de búsqueda. Si no hay nada
+  -- útil, se descarta geo (pero NO se descarta la opción).
+  g := o->'geo';
+  if jsonb_typeof(g) = 'object' then
+    if (g->>'lat') ~ '^-?[0-9]+(\.[0-9]+)?$' and (g->>'lng') ~ '^-?[0-9]+(\.[0-9]+)?$'
+       and abs((g->>'lat')::numeric) <= 90 and abs((g->>'lng')::numeric) <= 180 then
+      out := out || jsonb_build_object('geo', jsonb_build_object(
+        'texto', left(coalesce(g->>'texto', ''), 200),
+        'lat',   round((g->>'lat')::numeric, 6),
+        'lng',   round((g->>'lng')::numeric, 6)));
+    elsif btrim(coalesce(g->>'texto', '')) <> '' then
+      out := out || jsonb_build_object('geo',
+        jsonb_build_object('texto', left(btrim(g->>'texto'), 200)));
+    end if;
+  elsif jsonb_typeof(g) = 'string' and btrim(g #>> '{}') <> '' then
+    -- Compatibilidad con geo como string "lat,lng" o dirección de texto.
+    out := out || jsonb_build_object('geo',
+      jsonb_build_object('texto', left(btrim(g #>> '{}'), 200)));
+  end if;
+
+  return out;
+end $$;
+
+-- ¿Tiene sentido que las opciones sean objetos para este tipo de pregunta?
+create or replace function _tipo_admite_objetos(p_tipo text) returns boolean
+language sql immutable as $$
+  select p_tipo in ('casas', 'checkbox', 'voto-ponderado', 'radio')
+$$;
+
 create or replace function _auth(p_eid text, p_nombre text, p_pin text, p_crear boolean default false)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -152,6 +221,8 @@ end $$;
 create or replace function _snapshot(p_eid text) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
+    'titulo', coalesce((select titulo from encuestas where eid = p_eid),
+                       'Cuestionario de viaje'),
     'schema', coalesce((
       select jsonb_agg(jsonb_build_object('id', p.id, 'tipo', p.tipo, 'label', p.label,
                                           'opciones', p.opciones, 'config', p.config) order by coalesce(p.pos, p.seq + 1000000))
@@ -314,7 +385,7 @@ end $$;
 create or replace function add_opcion(p_eid text, p_nombre text, p_pin text, p_qid text, p_opcion jsonb)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare
-  a jsonb; q preguntas%rowtype; o jsonb := p_opcion;
+  a jsonb; q preguntas%rowtype; o jsonb;
 begin
   a := _auth(p_eid, p_nombre, p_pin, false);
   if a ? 'error' then return a; end if;
@@ -324,17 +395,14 @@ begin
   if q.tipo not in ('checkbox', 'voto-ponderado', 'radio', 'casas') then
     return jsonb_build_object('error', 'Esta pregunta no admite opciones');
   end if;
-  if o is null or pg_column_size(o) > 2000 then return jsonb_build_object('error', 'Opción inválida'); end if;
+  if p_opcion is null or pg_column_size(p_opcion) > 2000 then
+    return jsonb_build_object('error', 'Opción inválida');
+  end if;
 
-  if q.tipo = 'casas' then
-    if jsonb_typeof(o) <> 'object' or btrim(coalesce(o->>'nombre', '')) = '' then
-      return jsonb_build_object('error', 'Opción inválida');
-    end if;
-    o := jsonb_build_object(
-      'nombre', btrim(o->>'nombre'),
-      'precio', coalesce(o->>'precio', ''),
-      'url',    case when coalesce(o->>'url', '') ~* '^https?://' then o->>'url' else '' end);
-  elsif jsonb_typeof(o) <> 'string' or btrim(o #>> '{}') = '' then
+  -- Sanitizado único: conserva nombre/precio/url/foto/geo y rechaza lo demás.
+  -- (Antes se reconstrucía con lista fija y geo/foto se perdían al sondear.)
+  o := _san_opcion(q.tipo, p_opcion);
+  if o is null or (q.tipo = 'casas' and jsonb_typeof(o) <> 'object') then
     return jsonb_build_object('error', 'Opción inválida');
   end if;
 
@@ -343,6 +411,128 @@ begin
   end if;
 
   update preguntas set opciones = opciones || jsonb_build_array(o) where eid = p_eid and id = p_qid;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Editar una opción existente (renombrado incluido). `p_old_optkey` es la clave
+-- actual (opt_key de la opción); `p_nueva_opcion` la nueva forma, sanitizada
+-- con _san_opcion para que sobrevivan precio/url/foto/geo. Si cambia la clave,
+-- se migran también las selecciones ya guardadas en las respuestas del grupo
+-- (para que nadie pierda su voto al renombrar una opción).
+create or replace function edit_opcion(p_eid text, p_nombre text, p_pin text,
+                                       p_qid text, p_old_optkey text, p_nueva_opcion jsonb)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare
+  a jsonb; q preguntas%rowtype; nueva jsonb; oldk text := btrim(coalesce(p_old_optkey, ''));
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  if oldk = '' or length(oldk) > 200 or p_nueva_opcion is null
+     or pg_column_size(p_nueva_opcion) > 2000 then
+    return jsonb_build_object('error', 'Opción inválida');
+  end if;
+
+  select * into q from preguntas where eid = p_eid and id = p_qid for update;
+  if not found then return jsonb_build_object('error', 'Pregunta no encontrada'); end if;
+  if q.tipo not in ('checkbox', 'voto-ponderado', 'radio', 'casas') then
+    return jsonb_build_object('error', 'Esta pregunta no admite opciones');
+  end if;
+
+  nueva := _san_opcion(q.tipo, p_nueva_opcion);
+  if nueva is null or (q.tipo = 'casas' and jsonb_typeof(nueva) <> 'object') then
+    return jsonb_build_object('error', 'Opción inválida');
+  end if;
+  if not exists (select 1 from jsonb_array_elements(q.opciones) e where opt_key(q.tipo, e) = oldk) then
+    return jsonb_build_object('error', 'La opción ya no existe');
+  end if;
+  if opt_key(q.tipo, nueva) <> oldk and exists (
+       select 1 from jsonb_array_elements(q.opciones) e
+        where opt_key(q.tipo, e) = opt_key(q.tipo, nueva)) then
+    return jsonb_build_object('error', 'Ya existe una opción con ese nombre');
+  end if;
+
+  update preguntas
+     set opciones = (
+       select coalesce(jsonb_agg(case when opt_key(q.tipo, e) = oldk then nueva else e end), '[]'::jsonb)
+         from jsonb_array_elements(q.opciones) e)
+   where eid = p_eid and id = p_qid;
+
+  -- Migrar selecciones previas si la clave cambió (respuestas enviadas y borradores).
+  if opt_key(q.tipo, nueva) <> oldk then
+    update respuestas r
+       set answers = case
+           when q.tipo = 'voto-ponderado' then
+             jsonb_set(
+               coalesce(r.answers - 'values', '{}'::jsonb) ||
+                 jsonb_build_object('values',
+                   coalesce(r.answers->'values', '{}'::jsonb)),
+               '{values,' || p_qid || '}',
+               (select coalesce(jsonb_object_agg(
+                          case when k = oldk then opt_key(q.tipo, nueva) else k end, v), '{}'::jsonb)
+                  from jsonb_each(coalesce(r.answers #> ('{values,' || p_qid || '}'), '{}'::jsonb)) x(k, v)),
+               true)
+           else
+             jsonb_set(
+               coalesce(r.answers - 'values', '{}'::jsonb) ||
+                 jsonb_build_object('values',
+                   coalesce(r.answers->'values', '{}'::jsonb)),
+               '{values,' || p_qid || '}',
+               (select coalesce(jsonb_agg(
+                          case when x.v #>> '{}' = oldk
+                               then (opt_key(q.tipo, nueva))::jsonb else x.v end), '[]'::jsonb)
+                  from jsonb_array_elements(
+                         coalesce(r.answers #> ('{values,' || p_qid || '}'), '[]'::jsonb)) x(v)),
+               true)
+         end
+     where r.eid = p_eid
+       and jsonb_typeof(r.answers #> ('{values,' || p_qid || '}')) is not null;
+  end if;
+
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Eliminar una opción del esquema (y de las respuestas guardadas del grupo).
+create or replace function delete_opcion(p_eid text, p_nombre text, p_pin text, p_qid text, p_optkey text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare
+  a jsonb; q preguntas%rowtype; k text := btrim(coalesce(p_optkey, ''));
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  if k = '' or length(k) > 200 then return jsonb_build_object('error', 'Opción inválida'); end if;
+
+  select * into q from preguntas where eid = p_eid and id = p_qid for update;
+  if not found then return jsonb_build_object('error', 'Pregunta no encontrada'); end if;
+  if q.tipo not in ('checkbox', 'voto-ponderado', 'radio', 'casas') then
+    return jsonb_build_object('error', 'Esta pregunta no admite opciones');
+  end if;
+
+  update preguntas
+     set opciones = (
+       select coalesce(jsonb_agg(e), '[]'::jsonb)
+         from jsonb_array_elements(q.opciones) e
+        where opt_key(q.tipo, e) <> k)
+   where eid = p_eid and id = p_qid;
+
+  update respuestas r
+     set answers = jsonb_set(
+           coalesce(r.answers - 'values', '{}'::jsonb) ||
+             jsonb_build_object('values', coalesce(r.answers->'values', '{}'::jsonb)),
+           '{values,' || p_qid || '}',
+           case
+             when q.tipo = 'voto-ponderado' then
+               (select coalesce(jsonb_object_agg(x.k, x.v) - k, '{}'::jsonb)
+                  from jsonb_each(coalesce(r.answers #> ('{values,' || p_qid || '}'), '{}'::jsonb)) x(k, v))
+             else
+               (select coalesce(jsonb_agg(x.v), '[]'::jsonb)
+                  from jsonb_array_elements(
+                         coalesce(r.answers #> ('{values,' || p_qid || '}'), '[]'::jsonb)) x(v)
+                 where x.v #>> '{}' <> k)
+           end,
+           true)
+   where r.eid = p_eid
+     and jsonb_typeof(r.answers #> ('{values,' || p_qid || '}')) is not null;
+
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -383,30 +573,83 @@ begin
   v_cfg   := coalesce(p_pregunta->'config', '{}'::jsonb);
 
   if v_id is null or v_id !~ '^[a-z0-9_-]{1,80}$'
-     or v_tipo not in ('checkbox','voto-ponderado','radio','casas','slider','disponibilidad','textarea')
+     or v_tipo not in ('checkbox','voto-ponderado','radio','casas','slider',
+                       'disponibilidad','horarios','textarea')
      or char_length(v_label) not between 1 and 200
      or jsonb_typeof(v_op) <> 'array' or jsonb_typeof(v_cfg) <> 'object' then
     return jsonb_build_object('error', 'Pregunta inválida');
   end if;
 
-  if v_tipo = 'casas' then
-    select coalesce(jsonb_agg(jsonb_build_object(
-             'nombre', btrim(e->>'nombre'),
-             'precio', coalesce(e->>'precio', ''),
-             'url',    case when coalesce(e->>'url', '') ~* '^https?://' then e->>'url' else '' end)), '[]'::jsonb)
-      into v_op
-      from jsonb_array_elements(v_op) e
-     where jsonb_typeof(e) = 'object' and btrim(coalesce(e->>'nombre', '')) <> '';
-  else
-    select coalesce(jsonb_agg(e), '[]'::jsonb) into v_op
-      from jsonb_array_elements(v_op) e
-     where jsonb_typeof(e) = 'string' and btrim(e #>> '{}') <> '';
-  end if;
+  -- Sanitizado de opciones con el mismo criterio que add/edit_opcion: los
+  -- objetos conservan nombre/precio/url/foto/geo y las cadenas se validan.
+  select coalesce(jsonb_agg(_san_opcion(v_tipo, e)), '[]'::jsonb)
+    into v_op
+    from jsonb_array_elements(v_op) e
+   where _san_opcion(v_tipo, e) is not null;
 
   insert into preguntas (eid, id, tipo, label, opciones, config, autor, pos)
   values (p_eid, v_id, v_tipo, v_label, v_op, v_cfg, a->>'nombre',
           coalesce((select max(pos) + 1 from preguntas where eid = p_eid), 1))
   on conflict (eid, id) do nothing;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Editar el texto y/o la configuración de una pregunta existente. `p_config`
+-- es el objeto completo que reemplaza al anterior (incluye seccion, mostrarSi,
+-- franjas, etc.); se limita su tamaño para evitar payloads abusivos.
+create or replace function edit_pregunta(p_eid text, p_nombre text, p_pin text,
+                                         p_qid text, p_label text default null,
+                                         p_config jsonb default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb; v_lbl text;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  if p_qid is null or p_qid !~ '^[a-z0-9_-]{1,80}$' then
+    return jsonb_build_object('error', 'Pregunta no encontrada');
+  end if;
+  if p_label is null and p_config is null then
+    return jsonb_build_object('error', 'Nada que guardar');
+  end if;
+  if p_config is not null and (jsonb_typeof(p_config) <> 'object'
+                               or pg_column_size(p_config) > 20000) then
+    return jsonb_build_object('error', 'Configuración inválida');
+  end if;
+
+  update preguntas q
+     set label  = case when p_label is not null
+                       then left(btrim(p_label), 200) else q.label end,
+         config = coalesce(p_config, q.config)
+   where q.eid = p_eid and q.id = p_qid
+     and (p_label is null or length(btrim(p_label)) between 1 and 200);
+  if not found then return jsonb_build_object('error', 'Pregunta no encontrada o etiqueta inválida'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Borrado lógico de pregunta: se elimina del esquema y de las respuestas del
+-- grupo (los votos/historial asociados a esa pregunta desaparecen también).
+create or replace function delete_pregunta(p_eid text, p_nombre text, p_pin text, p_qid text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, false);
+  if a ? 'error' then return a; end if;
+  if p_qid is null or p_qid !~ '^[a-z0-9_-]{1,80}$' then
+    return jsonb_build_object('error', 'Pregunta no encontrada');
+  end if;
+
+  delete from preguntas where eid = p_eid and id = p_qid;
+  if not found then return jsonb_build_object('error', 'Pregunta no encontrada'); end if;
+  delete from proscontras where eid = p_eid and qid = p_qid;
+  delete from debate      where eid = p_eid and qid = p_qid;
+  update respuestas r
+     set answers = jsonb_set(
+           coalesce(r.answers - 'values', '{}'::jsonb) ||
+             jsonb_build_object('values', coalesce(r.answers->'values', '{}'::jsonb)),
+           '{values}',
+           coalesce(r.answers->'values', '{}'::jsonb) - p_qid,
+           true)
+   where r.eid = p_eid and jsonb_typeof(r.answers->'values') = 'object';
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -486,26 +729,61 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
--- ── ADMIN: crear una encuesta (configuración declarativa generalizada) ─────
+-- ── CREAR ENCUESTA (RPC pública, sin preguntas fijas por defecto) ──────────
+-- Plantillas disponibles:
+--   'vacia'    → encuesta en blanco (el grupo crea secciones y preguntas).
+--   'quedada'  → set de ejemplo con secciones legibles (config.seccion);
+--                los IDs son generados, no anclados: la app no depende de ellos.
+create or replace function crear_encuesta_publica(p_eid text, p_nombre text, p_pin text,
+                                                  p_plantilla text default 'vacia',
+                                                  p_titulo text default 'Cuestionario de viaje')
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare a jsonb; v_tit text; sfx text;
+begin
+  a := _auth(p_eid, p_nombre, p_pin, true);
+  if a ? 'error' then return a; end if;
+
+  v_tit := left(btrim(coalesce(nullif(p_titulo, ''), 'Cuestionario de viaje')), 80);
+  insert into encuestas (eid, titulo) values (p_eid, v_tit)
+    on conflict (eid) do update set titulo = excluded.titulo;
+
+  if coalesce(p_plantilla, 'vacia') = 'vacia' then
+    return jsonb_build_object('ok', true, 'plantilla', 'vacia');
+  end if;
+
+  -- Plantilla de ejemplo: cada pregunta lleva config.seccion para que el raíl
+  -- las agrupe. Se usan sufijos únicos para permitir varias encuestas.
+  sfx := substr(translate(p_eid, '-', '_'), 1, 20);
+
+  insert into preguntas (eid, id, tipo, label, opciones, config, pos) values
+    (p_eid, 'plan_' || sfx, 'checkbox', '¿Qué plan dirías en realidad?',
+     '["Casa rural","Camping / aire libre / hamaqueo","Plan más elaborado","Turisteo","Playa"]',
+     '{"seccion":"Preferencias"}', 1),
+    (p_eid, 'aloj_' || sfx, 'casas', '¿Qué alojamientos en particular te gustan?', '[]',
+     '{"seccion":"Preferencias"}', 2),
+    (p_eid, 'presu_' || sfx, 'slider', 'Presupuesto máximo por persona', '[]',
+     '{"min":20,"max":500,"step":20,"default":100,"unit":" €","seccion":"Presupuesto"}', 3),
+    (p_eid, 'trans_' || sfx, 'radio', 'Transporte',
+     '["llevo-coche|Llevo coche","necesito|Necesito que me lleven","propio|Me busco la vida"]',
+     '{"conditionalStepper":{"when":"llevo-coche","key":"plazasLibres","label":"Plazas libres en mi coche:","min":1,"max":8,"default":3},"seccion":"Logística"}', 4),
+    (p_eid, 'cuand_' || sfx, 'disponibilidad', '¿Cuándo podrías?', '[]',
+     '{"seccion":"Fechas"}', 5),
+    (p_eid, 'notas_' || sfx, 'textarea', 'Algo más que añadir', '[]',
+     '{"placeholder":"Restricciones, alergias, preferencias, lo que sea…","seccion":"Notas"}', 6)
+  on conflict (eid, id) do nothing;
+
+  return jsonb_build_object('ok', true, 'plantilla', p_plantilla);
+end $$;
+
+-- (Legacy) crear_encuesta(text): conservada por compatibilidad, pero ya NO
+-- inserta preguntas con IDs anclados; equivale a la plantilla vacía.
 create or replace function crear_encuesta(p_eid text) returns text
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   if p_eid is null or p_eid !~ '^[a-z0-9-]{1,60}$' then
     raise exception 'ID inválido: solo a-z, 0-9 y guiones (máx. 60)';
   end if;
-  insert into encuestas (eid) values (p_eid);
-  insert into preguntas (eid, id, tipo, label, opciones, config) values
-    (p_eid, 'opciones-destino', 'checkbox',       '¿Qué plan dirías en realidad?',
-       '["Casa rural","Camping / aire libre / hamaqueo","Plan más elaborado","Turisteo","Playa"]', '{}'),
-    (p_eid, 'casas',            'casas',          '¿Qué casas en particular te gustan?', '[]', '{}'),
-    (p_eid, 'precio',           'slider',         'Precio máximo por persona', '[]',
-       '{"min":20,"max":500,"step":20,"default":100,"unit":" €"}'),
-    (p_eid, 'transporte',       'radio',          'Transporte',
-       '["llevo-coche|Llevo coche","necesito|Necesito que me lleven","propio|Me busco la vida"]',
-       '{"conditionalStepper":{"when":"llevo-coche","key":"plazasLibres","label":"Plazas libres en mi coche:","min":1,"max":8,"default":3}}'),
-    (p_eid, 'disponibilidad',   'disponibilidad', '¿Cuándo podrías?', '[]', '{}'),
-    (p_eid, 'notas',            'textarea',       'Algo más que añadir', '[]',
-       '{"placeholder":"Restricciones, alergias, preferencias, lo que sea…"}');
+  insert into encuestas (eid) values (p_eid) on conflict (eid) do nothing;
   return 'Encuesta creada: ' || p_eid;
 end $$;
 
@@ -551,6 +829,8 @@ revoke all on function opt_key(text, jsonb)                   from public, anon,
 revoke all on function _auth(text, text, text, boolean)       from public, anon, authenticated;
 revoke all on function _snapshot(text)                        from public, anon, authenticated;
 revoke all on function crear_encuesta(text)                   from public, anon, authenticated;
+revoke all on function _san_opcion(text, jsonb)               from public, anon, authenticated;
+revoke all on function _tipo_admite_objetos(text)             from public, anon, authenticated;
 
 grant execute on function
   entrar(text, text, text),
@@ -560,9 +840,18 @@ grant execute on function
   submit_response(text, text, text, jsonb),
   vote_ausencia(text, text, text, jsonb, int),
   add_opcion(text, text, text, text, jsonb),
+  edit_opcion(text, text, text, text, text, jsonb),
+  delete_opcion(text, text, text, text, text),
   add_proscontra(text, text, text, text, text, text, text),
   add_pregunta(text, text, text, jsonb),
+  edit_pregunta(text, text, text, text, text, jsonb),
+  delete_pregunta(text, text, text, text),
   add_debate(text, text, text, text, text, bigint, text, text),
   vote_debate(text, text, text, bigint),
-  resolve_debate(text, text, text, bigint, boolean)
+  resolve_debate(text, text, text, bigint, boolean),
+  update_profile(text, text, text, text, text),
+  crear_encuesta_publica(text, text, text, text, text)
 to anon, authenticated;
+
+-- Recargar el catálogo de PostgREST para que vea las funciones nuevas.
+notify pgrst, 'reload schema';

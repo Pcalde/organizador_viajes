@@ -332,6 +332,17 @@ function createOptionCrudControls(item, q, rawOp) {
 }
 
 // ── CONSTRUCTORES DE ÍTEMS CON DRAWER VISUAL INTEGRADO ──────────────────────
+// Clave normalizada de una opción para el editor: si la opción es un objeto
+// enriquecido ({nombre, precio, geo…}) se usa ese objeto como rawOp (así el
+// drawer reabre con precio/foto/DESTINO intactos y guardar no los borra);
+// si es un string, se pasa tal cual. `op` puede venir ya como clave suelta.
+function _rawOptPara(q, op) {
+  if (op && typeof op === 'object') return op;
+  const list = q.opciones || [];
+  const found = list.find(o => o && typeof o === 'object' && o.nombre === op);
+  return found || op;
+}
+
 function createOptItem(q, rawOp) {
   const qObj = typeof q === 'object' ? q : (schema.find(x => x.id === q) || { id: q, tipo: 'checkbox' });
   const val  = optVal(qObj, rawOp);
@@ -491,10 +502,11 @@ function checkedValues(card) {
 }
 
 function getRadioStepperConfig(q) {
+  // El stepper condicional se define SIEMPRE en la pregunta:
+  // config.conditionalStepper = { when, key, label, min, max, default }.
+  // (Antes había un caso hardcodeado para q.id === 'transporte'; los IDs
+  // anclados ya no existen — las plantillas usan conditionalStepper.)
   if (q.config && q.config.conditionalStepper) return q.config.conditionalStepper;
-  if (q.id === 'transporte') {
-    return { when: 'llevo-coche', key: 'plazasLibres', label: 'Plazas libres en mi coche:', min: 1, max: 8, default: 3 };
-  }
   return null;
 }
 
