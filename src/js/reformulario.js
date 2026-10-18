@@ -125,11 +125,6 @@ function intersectIntervalLists(A, B) {
   return out;
 }
 
-function fmtHoraDecimal(h) {
-  if (h >= 24) return 'd+' + fmtHM(h);
-  return fmtHM(h);
-}
-
 // Cruce de horarios entre dos viajeros para una ventana de días dada:
 // mayor solape efectivo (horas) y franja resultante. null si no hay cruce.
 function cruzarHorariosPareja(vA, vB, diasRango, durH, franjas) {
@@ -148,8 +143,23 @@ function cruzarHorariosPareja(vA, vB, diasRango, durH, franjas) {
     }
   }
   if (!best) return null;
-  best.texto = `${fmtShortDate(best.dia)} ${fmtHoraDecimal(best.ini)}–${fmtHoraDecimal(best.fin)}`;
+  // Formato legible: "26/12 (18:00) → 27/12 (05:00)" (la fecha se repite solo si cambia de día)
+  const fIni = fmtShortDate(best.dia);
+  const hIni = Math.floor(best.ini), mIni = Math.round((best.ini - hIni) * 60);
+  const fFin = fmtShortDate(addDaysISO(best.dia, Math.floor(hIni / 24)));
+  const hFin = ((Math.floor(best.fin) % 24) + 24) % 24, mFin = Math.round((best.fin - Math.floor(best.fin)) * 60);
+  const pad = n => String(n).padStart(2, '0');
+  const mismoDia = fIni === fFin;
+  best.texto = `${fIni} (${pad(hIni)}:${pad(mIni)})`
+             + (mismoDia ? '' : ` → ${fFin}`)
+             + ` (${pad(hFin)}:${pad(mFin)})`;
   return best;
+}
+
+function addDaysISO(iso, n) {
+  const dt = new Date(iso + 'T00:00:00Z');
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
 }
 
 // ── 2. NORMALIZACIÓN Y MATRIZ DE DISPONIBILIDAD (Port de datos.py) ──────────
@@ -1092,7 +1102,7 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
     const tagFinde = sol.incluyeFinde ? 'Incluye Fin de Semana' : 'Solo entre semana';
     const tagExcursion = (sol.excursion || sol.L === 1) ? ' · Excursión (ir y venir)' : '';
     const cruceStr = sol.cruceHorario
-      ? ` · Cruce horario: ${sol.cruceHorario.texto} (${sol.cruceHorario.solape.toFixed(1)} h)`
+      ? ` · Cruce horario: ${sol.cruceHorario.texto} (${sol.cruceHorario.solape.toFixed(1).replace(/\.0$/, '')} h)`
       : '';
     const pStr = sol.pMaxGrupo != null ? `${sol.pMaxGrupo} €` : 'N/A';
     const logOn = !(sol.flujo && sol.flujo.sinLogistica);
@@ -1182,7 +1192,7 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
       <div class="sol-card-head">
         <div>
           <span class="sol-tag">Solución Óptima #${idx + 1} · ${tagFinde}${esc(tagExcursion)}</span>
-          <h3 class="sol-interval">${fmtShortDate(sol.fIni)} → ${fmtShortDate(sol.fFin)} (${sol.L} días)${esc(cruceStr)}</h3>
+          <h3 class="sol-interval">${fmtShortDate(sol.fIni)} → ${fmtShortDate(sol.fFin)} (${sol.L} día${sol.L === 1 ? '' : 's'})${esc(cruceStr)}</h3>
         </div>
         <div class="sol-pills">
           <span class="sol-pill">Total <b>${sol.N}</b></span>
@@ -1223,7 +1233,7 @@ function buildFeasibleSolutionsSection(soluciones, diagnosticos, topo) {
     `;
 
     card.querySelector('.btn-propose-sol').addEventListener('click', () => {
-      const textoPropuesta = `Propongo cerrar la Solución #${idx + 1}: del ${fmtShortDate(sol.fIni)} al ${fmtShortDate(sol.fFin)} (${sol.L} días, ${sol.N} asistentes: ${[...sol.asistentesNucleo, ...sol.satelitesAsignados].join(', ')}). Plan: ${sol.opcionVotada}.`;
+      const textoPropuesta = `Propongo cerrar la Solución #${idx + 1}: del ${fmtShortDate(sol.fIni)} al ${fmtShortDate(sol.fFin)} (${sol.L} día${sol.L === 1 ? '' : 's'}, ${sol.N} asistentes: ${[...sol.asistentesNucleo, ...sol.satelitesAsignados].join(', ')}). Plan: ${sol.opcionVotada}.`;
       if (typeof createProposalFromConsensus === 'function') {
         createProposalFromConsensus(textoPropuesta);
       }

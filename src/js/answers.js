@@ -2,17 +2,21 @@
 
 let patchTimer = null;
 
+// El estado de sincronización se muestra DENTRO del botón de envío:
+//   · "Actualizar respuesta →" si hay cambios locales sin enviar
+//   · "✓ Todo al día"         si está sincronizado con el grupo
+function updateSubmitBtnLabel() {
+  const btn = $('btn-generate');
+  if (!btn || btn.disabled) return; // no pisar el texto transitorio "Enviando…"
+  btn.textContent = draftDirty ? 'Actualizar respuesta →' : '✓ Todo al día';
+  btn.classList.toggle('up-to-date', !draftDirty);
+}
+
 function setDraftDirty(isDirty) {
   draftDirty = isDirty;
   const badge = $('badge-draft');
   if (badge) badge.style.display = isDirty ? 'inline' : 'none';
-  const syncTxt = $('sticky-sync-state');
-  if (syncTxt) {
-    syncTxt.textContent = isDirty
-      ? '● Tienes cambios en borrador local sin enviar al grupo'
-      : '✓ Tus respuestas están sincronizadas con el grupo';
-    syncTxt.classList.toggle('unsaved', isDirty);
-  }
+  updateSubmitBtnLabel();
 }
 
 function triggerSave() {
@@ -175,7 +179,7 @@ async function enviarRespuesta(silent = false) {
   } finally {
     if (btn && !silent) {
       btn.disabled = false;
-      btn.textContent = 'Enviar mi respuesta →';
+      updateSubmitBtnLabel(); // "✓ Todo al día" tras sincronizar
     }
   }
 }
