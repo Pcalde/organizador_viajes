@@ -75,6 +75,11 @@ header h1 em { font-style: italic; color: var(--accent); }
   display: grid; grid-template-columns: 230px minmax(0, 720px);
   gap: 28px; max-width: 1010px; margin: 0 auto; align-items: start;
 }
+/* Colocación explícita en la cuadrícula: raíl en la columna izquierda y
+   contenido principal en la derecha. Evita que elementos intermedios (p.ej.
+   la tarjeta de participantes) desplacen el raíl si cambia el orden del DOM. */
+.form-wrap > .sec-rail { grid-column: 1; grid-row: 1; }
+.form-wrap > .sec-main { grid-column: 2; grid-row: 1; }
 .sec-main { min-width: 0; display: flex; flex-direction: column; gap: 24px; }
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
@@ -617,7 +622,7 @@ body.map-modal-open { overflow: hidden; }
   bottom: 14px; width: min(880px, calc(100% - 24px));
   background: var(--card); border: 1px solid var(--border);
   border-radius: 14px; box-shadow: 0 10px 34px rgba(0,0,0,.16);
-  padding: 10px 14px 12px; z-index: 60;
+  padding: 10px 14px 12px; z-index: 90; /* por encima del raíl y tarjetas para evitar solapamientos */
   transition: transform .25s ease, opacity .25s ease; opacity: 0;
   pointer-events: none;
 }
