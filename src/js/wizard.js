@@ -62,15 +62,23 @@ function scheduleRefreshSections() {
   }, 350);
 }
 
-// ── Envolvente de renderAllQuestions: añade a cada tarjeta su bloque de
-//    estadísticas del grupo y aplica la paginación del asistente ─────────────
-const _origRenderAllQuestions = (typeof renderAllQuestions === 'function') ? renderAllQuestions : null;
-renderAllQuestions = function () {
-  if (_origRenderAllQuestions) _origRenderAllQuestions.apply(null, arguments);
-  decorateQuestionCards();
-  applyWizardPaging();
-  updateWizNav();
-};
+// ── Envolventes (monkey-patch) ───────────────────────────────────────────────
+// Se aplican en initWizard(), que main.js llama DESPUÉS de cargar todos los
+// <script>. Así se evita el problema del "temporal dead zone": si el wrapper
+// se asigna al evaluar este archivo, pisa la declaración `function` posterior
+// y la llamada original queda sin inicializar (ReferenceError al iniciar sesión).
+let _origRenderAllQuestions = null;
+
+function initWizard() {
+  if (_origRenderAllQuestions !== null || typeof renderAllQuestions !== 'function') return;
+  _origRenderAllQuestions = renderAllQuestions;
+  renderAllQuestions = function () {
+    if (_origRenderAllQuestions) _origRenderAllQuestions.apply(null, arguments);
+    decorateQuestionCards();
+    applyWizardPaging();
+    updateWizNav();
+  };
+}
 
 function decorateQuestionCards() {
   const container = $('questions-container');
@@ -106,6 +114,21 @@ function currentWizIndex() {
   return Math.min(Math.max(wizIndex, 0), n - 1);
 }
 
+// Qué barra flotante debe acompañar al usuario ahora mismo:
+//  · Vista cuestionario + modo asistente → barra de navegación (#wiz-nav)
+//  · Vista cuestionario sin asistente    → clon del botón de envío (#submit-fab)
+//  · Otras vistas                        → ninguna
+function updateFloatingBars() {
+  const inSurvey = activeMode === 'survey';
+  const wizOn    = inSurvey && surveyWizardMode && schema.length > 0;
+  const nav = $('wiz-nav'), fab = $('submit-fab');
+  if (nav) {
+    nav.classList.toggle('visible', wizOn);
+    if (wizOn) nav.style.display = '';
+  }
+  if (fab) fab.classList.toggle('visible', inSurvey && !wizOn);
+}
+
 function applyWizardPaging() {
   const container = $('questions-container');
   if (!container) return;
@@ -116,8 +139,7 @@ function applyWizardPaging() {
   wizIndex = currentWizIndex();
   cards.forEach((c, i) => { c.style.display = (on && i !== wizIndex) ? 'none' : ''; });
 
-  const nav = $('wiz-nav');
-  if (nav) nav.style.display = on ? 'flex' : 'none';
+  updateFloatingBars();
   if (!on) return;
 
   [...container.querySelectorAll(':scope > [data-empty-notice]')].forEach(el => el.remove());

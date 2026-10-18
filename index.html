@@ -100,6 +100,20 @@
         <span><i class="fa-solid fa-comments" aria-hidden="true"></i> Debate</span>
         <span class="tab-count" id="count-debate">0</span>
       </button>
+      <!-- Conmutador del modo asistente (wizard.js) -->
+      <div class="wiz-switch-row" id="wiz-mode-switch" role="group" aria-label="Modo de respuesta">
+        <span><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Modo asistente</span>
+        <span class="wiz-switch">
+          <button type="button" class="wiz-switch-opt" id="wiz-switch-on">On</button>
+          <button type="button" class="wiz-switch-opt active" id="wiz-switch-off">Off</button>
+        </span>
+      </div>
+
+      <!-- Lista de preguntas / secciones (la rellena wizard.js) -->
+      <div class="side-menu-sep"></div>
+      <div class="wiz-nav-title">Preguntas</div>
+      <div id="wiz-nav-items" class="wiz-nav-items"></div>
+
       <div class="side-menu-sep"></div>
       <button type="button" class="mode-tab side-menu-action" id="btn-map-modal">
         <span><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Ver mapa</span>
@@ -226,9 +240,27 @@
       </div>
     </div>
 
-    <!-- BOTÓN DE ENVÍO (sin barra negra: el estado va dentro del propio botón) -->
-    <div class="submit-row">
-      <button class="btn-generate" id="btn-generate" type="button">Actualizar respuesta →</button>
+    <!-- BARRA INFERIOR FIJA: navegación del asistente + botón de envío.
+         Acompaña al usuario durante todo el scroll (position: fixed). -->
+    <div class="wiz-nav submit-fab" id="wiz-nav">
+      <div class="wiz-progress" aria-hidden="true"><span class="wiz-bar-fill"></span></div>
+      <div class="wiz-nav-row">
+        <button type="button" class="wiz-btn" id="wiz-prev" aria-label="Pregunta anterior">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+        </button>
+        <span class="wiz-label">1 / 1</span>
+        <button type="button" class="wiz-btn wiz-next-btn" id="wiz-next">
+          Siguiente <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+        <span class="fab-sep"></span>
+        <button class="btn-generate fab-submit" id="btn-generate" type="button">Actualizar respuesta →</button>
+      </div>
+    </div>
+
+    <!-- Clon flotante del botón de envío para cuando la barra del asistente
+         no está visible; wizard.js lo mantiene sincronizado con #btn-generate. -->
+    <div class="submit-fab-clone" id="submit-fab">
+      <button class="btn-generate" id="btn-generate-fab" type="button">Actualizar respuesta →</button>
     </div>
 
   </div><!-- /view-survey -->
@@ -264,11 +296,14 @@
 <script src="src/js/sesion.js"></script>
 <script src="src/js/types.js"></script>
 <script src="src/js/questions.js"></script>
+<!-- wizard.js va DESPUÉS de questions/reformulario/answers: envuelve
+     renderAllQuestions y updateSubmitBtnLabel, así que necesita que ya existan -->
 <script src="src/js/proscontras.js"></script>
 <script src="src/js/ausencias.js"></script>
 <script src="src/js/forms.js"></script>
 <script src="src/js/answers.js"></script>
 <script src="src/js/reformulario.js"></script>
+<script src="src/js/wizard.js"></script>
 <script src="src/js/mapa.js"></script>
 <script src="src/js/cuenta.js"></script>
 <script src="src/js/debate.js"></script>
