@@ -22,7 +22,68 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 var SEC_LS_GROUPINFO = 'cuestionador_groupinfo_v1'; // 'visible' | 'plegado' | 'esperar'
-var SEC_ESTADO = { idx: 0 };                        // índice (sobre schema) de la sección activa
+var SEC_ESTADO = { idx: 0 };                        // índice (sobre schema) de la pregunta activa
+
+// ── MODELO DE SECCIONES ─────────────────────────────────────────────────────
+// El raíl agrupa las preguntas por q.config.seccion. Las preguntas sin sección
+// forman una sección implícita con su propio título; si varias comparten el
+// mismo título, todas juntas forman UNA sección. Una pregunta marcada con
+// config.esEncabezado define siempre una sección propia (aunque no tenga
+// respuestas): es la «tarjeta marca» que crea el botón «+ Nueva sección».
+function _secNormNombre(s) { return String(s || '').trim().toLowerCase(); }
+
+function seccionesDelEsquema() {
+  const secs = [];
+  const byName = Object.create(null);
+  schema.forEach((q, i) => {
+    const cfg = q.config || {};
+    let nombre = String(cfg.seccion || '').trim();
+    if (cfg.esEncabezado && !nombre) nombre = q.label;
+    let sec = null;
+    if (nombre) {
+      const key = _secNormNombre(nombre);
+      sec = byName[key];
+      if (!sec) {
+        sec = { nombre, titulo: nombre, encabezadoIdx: -1, items: [] };
+        byName[key] = sec;
+        secs.push(sec);
+      }
+    } else {
+      sec = { nombre: '', titulo: q.label, encabezadoIdx: -1, items: [] };
+      secs.push(sec);
+    }
+    if (cfg.esEncabezado && sec.encabezadoIdx < 0) sec.encabezadoIdx = i;
+    sec.items.push({ q, i });
+  });
+  return secs;
+}
+
+// Preguntas visibles de una sección (excluye la tarjeta «marca» del raíl).
+function _secItemsVisibles(sec, answers) {
+  return sec.items.filter(it => !(it.q.config && it.q.config.esEncabezado) && esVisible(it.q, answers));
+}
+
+// Sección (objeto) a la que pertenece la pregunta en schema[idx].
+function _secDeIdx(idx, secs) {
+  const q = schema[idx];
+  if (!q) return null;
+  const cfg = q.config || {};
+  const own = !!cfg.esEncabezado;
+  const nombre = String(cfg.seccion || (own ? q.label : '')).trim();
+  const key = _secNormNombre(nombre);
+  return (secs || seccionesDelEsquema()).find(s =>
+    s.encabezadoIdx === idx ||
+    (key && _secNormNombre(s.nombre) === key) ||
+    (!key && s.items.some(it => it.i === idx))) || null;
+}
+
+// Índice de la primera pregunta visible de una sección (o -1).
+function _secPrimeraVisible(sec, answers) {
+  const vis = _secItemsVisibles(sec, answers);
+  if (vis.length) return vis[0].i;
+  if (sec.encabezadoIdx >= 0) return sec.encabezadoIdx;
+  return sec.items.length ? sec.items[0].i : -1;
+}
 
 // ── Ajuste global de la información del grupo ───────────────────────────────
 function getGroupInfoMode() {
@@ -329,35 +390,58 @@ function goToSection(i) {
   applySectionPaging();
   renderRail();
   renderBottomBar();
-  const card = document.querySelector('#questions-container > .card[data-qid]:not([hidden])');
-  if (card) setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+  // Al cambiar de sección se vuelve ARRIBA del todo (no al borde de la
+  // tarjeta), para que el raíl y la cabecera queden a la vista.
+  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
 }
 
 function nextSection() {
-  const vis = visibleQuestions();
-  const pos = vis.findIndex(v => v.i === SEC_ESTADO.idx);
-  if (pos < 0 || pos >= vis.length - 1) {
-    showStatus('Has revisado todas las secciones. Pulsa «Enviar» para sincronizar con el grupo.', 'ok', 5000);
-    return;
+  const secs = seccionesDelEsquema();
+  const cur = _secDeIdx(SEC_ESTADO.idx, secs);
+  const ci = cur ? secs.indexOf(cur) : -1;
+  const st = readState().answers;
+  for (let d = 1; d < secs.length; d++) {
+    const cand = secs[ci + d];
+    if (!cand) continue;
+    const idx = _secPrimeraVisible(cand, st);
+    if (idx >= 0) { goToSection(idx); return; }
   }
-  goToSection(vis[pos + 1].i);
+  showStatus('Has revisado todas las secciones. Pulsa «Enviar» para sincronizar con el grupo.', 'ok', 5000);
 }
 function prevSection() {
-  const vis = visibleQuestions();
-  const pos = vis.findIndex(v => v.i === SEC_ESTADO.idx);
-  if (pos <= 0) return;
-  goToSection(vis[pos - 1].i);
+  const secs = seccionesDelEsquema();
+  const cur = _secDeIdx(SEC_ESTADO.idx, secs);
+  const ci = cur ? secs.indexOf(cur) : -1;
+  const st = readState().answers;
+  for (let d = ci - 1; d >= 0; d--) {
+    const idx = _secPrimeraVisible(secs[d], st);
+    if (idx >= 0) { goToSection(idx); return; }
+  }
 }
 
-// Muestra solo la tarjeta activa; el resto queda oculta (display:none).
+// Muestra TODAS las tarjetas visibles de la sección activa; el resto queda
+// oculta (display:none). La sección activa es la que contiene la pregunta en
+// SEC_ESTADO.idx.
 function applySectionPaging() {
   const container = $('questions-container');
   if (!container) return;
   if (!schema.length) { renderRail(); renderBottomBar(); return; }
   secClampIndex();
-  const activeId = schema[SEC_ESTADO.idx] && schema[SEC_ESTADO.idx].id;
+  const st = readState().answers;
+  const secs = seccionesDelEsquema();
+  const cur = _secDeIdx(SEC_ESTADO.idx, secs) || secs[0];
+  let activeIds = null;
+  if (cur) {
+    // Si la activa es la primera visible pero existe una «marca», mostrarla
+    // junto a las preguntas para que el usuario vea el encabezado de la sección.
+    activeIds = new Set(_secItemsVisibles(cur, st).map(it => it.q.id));
+    if (cur.encabezadoIdx >= 0 && cur.items.some(it => it.i === SEC_ESTADO.idx)) {
+      activeIds.add(schema[cur.encabezadoIdx].id);
+    }
+    if (!activeIds.size && cur.items.length) activeIds.add(cur.items[0].q.id);
+  }
   [...container.querySelectorAll(':scope > .card[data-qid]')].forEach(c => {
-    c.style.display = (c.dataset.qid === activeId) ? '' : 'none';
+    c.style.display = (activeIds && activeIds.has(c.dataset.qid)) ? '' : 'none';
   });
   renderRail();
   renderBottomBar();
