@@ -90,9 +90,12 @@ function enterSurvey() {
   $('utag-nombre').textContent = user.nombre;
   $('utag-eid').textContent    = '#' + user.eid;
   resetAusencias();
-  renderAllQuestions();
+  // Cuestionario por secciones (secciones.js): renderiza, raíl, barra y paneles.
+  if (typeof renderSecciones === 'function') renderSecciones();
+  else renderAllQuestions();
   renderAusencias();
   restoreDraft();
+  if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
   startPolling();
 }
 
