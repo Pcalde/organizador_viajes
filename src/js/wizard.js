@@ -136,6 +136,7 @@ function applyWizardPaging() {
   const on = surveyWizardMode && activeMode === 'survey';
 
   // En modo asistente solo se ve la pregunta activa; sin wizard, todas.
+  const nav = $('wiz-nav');
   wizIndex = currentWizIndex();
   cards.forEach((c, i) => { c.style.display = (on && i !== wizIndex) ? 'none' : ''; });
 
@@ -158,9 +159,9 @@ function applyWizardPaging() {
     return;
   }
 
-  const label = nav.querySelector('.wiz-label');
+  const label = nav ? nav.querySelector('.wiz-label') : null;
   if (label) label.textContent = `${wizIndex + 1} / ${schema.length} · ${schema[wizIndex].label}`;
-  const bar = nav.querySelector('.wiz-bar-fill');
+  const bar = nav ? nav.querySelector('.wiz-bar-fill') : null;
   if (bar) bar.style.width = (((wizIndex + 1) / schema.length) * 100) + '%';
   const prev = $('wiz-prev'), next = $('wiz-next');
   if (prev) prev.disabled = wizIndex <= 0;
@@ -199,7 +200,11 @@ function updateWizNav() {
   const host = $('wiz-nav');
   if (!host) return;
   const show = (activeMode === 'survey');
-  host.style.display = show && surveyWizardMode ? 'flex' : show ? 'block' : 'none';
+  // La visibilidad de la barra flotante la controla updateFloatingBars() con la
+  // clase .visible; aquí solo se oculta por completo cuando no estamos en la
+  // vista del cuestionario (sin inline styles inconsistentes).
+  if (!show) host.style.display = 'none';
+  else if (host.style.display === 'none') host.style.display = '';
 
   const items = $('wiz-nav-items');
   if (!items) return;
