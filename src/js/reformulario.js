@@ -938,6 +938,8 @@ function renderReformulario() {
   container.appendChild(secHeader);
 
   schema.forEach((q, idx) => {
+    // En modo "sección" (wizard.js) solo se pinta la pregunta solicitada.
+    if (typeof _refQidOverride !== 'undefined' && _refQidOverride && q.id !== _refQidOverride) return;
     const card = buildAnalyticalCard(q, idx, myAns);
     if (card) container.appendChild(card);
   });
