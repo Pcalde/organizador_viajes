@@ -142,6 +142,9 @@ function buildQuestionCard(q, idx) {
       q.config = newCfg;
       renderAllQuestions();
       restoreDraft();
+      // El raíl y las condiciones pueden haber cambiado (nuevo mostrarSi,
+      // título de la fuente, etc.). Se difiere: restoreDraft marca cambios.
+      if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
       showStatus('Pregunta actualizada', 'ok', 2500);
       pollOnce();
     } catch (e) {
@@ -189,6 +192,8 @@ function buildQuestionCard(q, idx) {
         schema.forEach(q => { const c = cardFor(q.id); if (c) container.appendChild(c); });
       }
       renumberCards();
+      // Si la pregunta eliminada era fuente de alguna condición, se limpia en
+      // syncCondicionesTrasCambioEsquema() (vía pollOnce → polling.js).
       showStatus('Pregunta eliminada', 'ok', 2500);
       pollOnce();
     } catch (e) {
@@ -313,6 +318,25 @@ function moveCardDom(qid, dir) {
 async function moverPregunta(qid, dir) {
   const i = schema.findIndex(x => x.id === qid), j = i + dir;
   if (!user || i < 0 || j < 0 || j >= schema.length) return;
+
+  // Regla anti-ciclos: ninguna pregunta condicionada puede quedar POR
+  // DELANTE de la fuente de su condición. Al mover una sola posición, basta
+  // comprobar si `moved` salta por encima del origen directo de alguna
+  // dependencia (p.ej. mover «¿Cuánto?» delante de «¿Tienes coche?» cuando
+  // los gastos dependen del coche).
+  const moved = schema[i];
+  for (const q of schema) {
+    if (q.id === moved.id) continue;
+    const cond = q.config && q.config.mostrarSi;
+    if (!cond || !cond.qid || cond.qid !== moved.id) continue;
+    const qi = schema.findIndex(x => x.id === q.id);
+    const cruzaria = dir > 0 ? (qi <= j && qi > i) : (qi >= j && qi < i);
+    if (cruzaria) {
+      showStatus(`No puedes mover «${moved.label}» por delante de «${q.label}»: esta se muestra solo según aquella.`, 'err', 7000);
+      return;
+    }
+  }
+
   [schema[i], schema[j]] = [schema[j], schema[i]];
   moveCardDom(qid, dir);
   try {
@@ -325,4 +349,5 @@ async function moverPregunta(qid, dir) {
     moveCardDom(qid, -dir);
     showStatus('No se pudo reordenar: ' + e.message, 'err');
   }
+  if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
 }

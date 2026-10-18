@@ -18,22 +18,18 @@ function switchMode(mode) {
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
-  // Barras flotantes sincronizadas: en la vista del cuestionario decide wizard.js
-  // qué barra acompañar al usuario (navegación del asistente #wiz-nav si el modo
-  // asistente está activo, o el clon del botón de envío #submit-fab en modo
-  // clásico). Fuera de esa vista, ninguna. Con fallback si wizard.js no cargó.
+  // Barra inferior fija: solo acompañar al usuario en la vista del cuestionario.
+  // La lógica vive en secciones.js (updateFloatingBars); el fallback cubre el
+  // caso de que el módulo no hubiera cargado aún.
   if (typeof updateFloatingBars === 'function') {
     updateFloatingBars();
   } else {
-    const fab = $('submit-fab');
-    if (fab) fab.classList.toggle('visible', mode === 'survey');
-    const wizbar = $('wiz-nav');
-    if (wizbar) wizbar.classList.toggle('visible', mode === 'survey' && surveyWizardMode);
+    const nav = $('sec-nav');
+    if (nav) nav.classList.toggle('visible', mode === 'survey');
   }
 
-  // Repintar la paginación y el menú lateral del asistente tras cambiar de vista
-  if (typeof applyWizardPaging === 'function') applyWizardPaging();
-  if (typeof updateWizNav === 'function')      updateWizNav();
+  // Repintar raíl, paginación por secciones y barra tras cambiar de vista.
+  if (mode === 'survey' && typeof refreshSecciones === 'function') refreshSecciones();
 
   if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
@@ -177,7 +173,8 @@ function bindCreateTripUI() {
         $('login-screen').style.display  = 'none';
         $('survey-screen').style.display = 'block';
 
-        renderAllQuestions();
+        // Cuestionario por secciones: render + raíl + barra (secciones.js)
+        renderSecciones();
         if (typeof renderAusencias === 'function') renderAusencias();
         if (typeof renderReformulario === 'function') renderReformulario();
         if (typeof renderDebate === 'function') renderDebate();
@@ -222,19 +219,15 @@ function bindNavigation() {
 
 document.addEventListener('DOMContentLoaded', () => {
   ensureModalsClosed();   // si algo falla al arrancar, la página no queda tapada
-  // Lectura tolerante a fallos: si wizard.js no cargó (cache antiguo, error de
-  // red…), el login no revienta con ReferenceError: wizardGetFlag is not defined
-  surveyWizardMode = (typeof wizardGetFlag === 'function') ? wizardGetFlag() : false;
   bindAuth();
   bindCreateTripUI();
   bindForms();
   bindAusencias();
   bindSubmit();
   bindNavigation();
-  // initWizard() tras cargar todos los módulos: así los wrappers no pisan las
-  // declaraciones `function` posteriores (temporal dead zone que rompía las pestañas)
-  if (typeof initWizard === 'function') initWizard();
-  if (typeof bindWizard === 'function') bindWizard();
+  // Enlazado del cuestionario por secciones (raíl, barra inferior, teclado y
+  // ajuste de la información del grupo). Sin monkeypatching: funciones explícitas.
+  if (typeof initSecciones === 'function') initSecciones();
   if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_KEY.startsWith('TU_CLAVE')) {
     showLoginErr('Falta configurar js/config.js (SUPABASE_URL y SUPABASE_KEY).');
     return;

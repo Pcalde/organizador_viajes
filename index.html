@@ -100,19 +100,16 @@
         <span><i class="fa-solid fa-comments" aria-hidden="true"></i> Debate</span>
         <span class="tab-count" id="count-debate">0</span>
       </button>
-      <!-- Conmutador del modo asistente (wizard.js) -->
-      <div class="wiz-switch-row" id="wiz-mode-switch" role="group" aria-label="Modo de respuesta">
-        <span><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Modo asistente</span>
-        <span class="wiz-switch">
-          <button type="button" class="wiz-switch-opt" id="wiz-switch-on">On</button>
-          <button type="button" class="wiz-switch-opt active" id="wiz-switch-off">Off</button>
-        </span>
-      </div>
-
-      <!-- Lista de preguntas / secciones (la rellena wizard.js) -->
+      <!-- Ajuste global de la información del grupo (secciones.js) -->
       <div class="side-menu-sep"></div>
-      <div class="wiz-nav-title">Preguntas</div>
-      <div id="wiz-nav-items" class="wiz-nav-items"></div>
+      <label class="sec-groupinfo-row" for="sec-groupinfo-mode">
+        <span><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Info del grupo</span>
+        <select id="sec-groupinfo-mode">
+          <option value="visible">Siempre visible</option>
+          <option value="plegado">Plegada</option>
+          <option value="esperar">Oculta hasta responder</option>
+        </select>
+      </label>
 
       <div class="side-menu-sep"></div>
       <button type="button" class="mode-tab side-menu-action" id="btn-map-modal">
@@ -157,8 +154,12 @@
 
   <div id="gas-status" style="max-width:880px;margin:0 auto 18px"></div>
 
-  <!-- ── VISTA 1: ENCUESTA INDIVIDUAL ─────────────────────────────────── -->
+  <!-- ── VISTA 1: ENCUESTA INDIVIDUAL (por secciones, secciones.js) ────── -->
   <div class="form-wrap" id="view-survey">
+
+    <!-- RAÍL DE SECCIONES: siempre visible a la izquierda (chips horizontales
+         en pantallas estrechas). Lo rellena renderRail() en secciones.js. -->
+    <nav id="sec-rail" class="sec-rail" aria-label="Secciones del cuestionario"></nav>
 
     <section class="card" id="participants-card">
       <div class="card-title"><span class="num"><i class="fa-solid fa-users" aria-hidden="true"></i></span> Participantes y votantes</div>
@@ -166,101 +167,103 @@
       <div id="participants-list" class="participants-list" aria-live="polite"></div>
     </section>
 
-    <div id="questions-container" style="display:flex;flex-direction:column;gap:24px"></div>
+    <!-- COLUMNA PRINCIPAL: una sola sección visible cada vez (máx. 720 px) -->
+    <main class="sec-main">
+      <div id="questions-container" style="display:flex;flex-direction:column;gap:24px"></div>
 
-    <!-- PROPONER NUEVA SECCIÓN -->
-    <div class="card" id="add-question-card">
-      <div class="card-title"><span class="num">+</span> Ampliar el cuestionario</div>
-      <button class="add-opt-trigger" id="btn-toggle-add-q" type="button">+ Proponer una nueva pregunta al grupo</button>
-      <div class="add-q-form" id="add-q-form">
-        <div class="add-q-field">
-          <label>Tipo de pregunta</label>
-          <select id="add-q-tipo">
-            <option value="checkbox">Selección múltiple (Checkbox)</option>
-            <option value="voto-ponderado">Votación con puntos (-1, +1, +3)</option>
-            <option value="radio">Selección única (Radio)</option>
-            <option value="casas">Listado de casas (Nombre + Precio + URL)</option>
-            <option value="slider">Rango numérico (Slider)</option>
-            <option value="horarios">Horarios por franjas (quedadas)</option>
-            <option value="disponibilidad">Calendario y fechas (Disponibilidad)</option>
-            <option value="textarea">Texto libre</option>
-          </select>
-        </div>
-        <div class="add-q-field">
-          <label>Texto de la pregunta</label>
-          <input type="text" id="add-q-label" placeholder="p.ej. ¿Qué aspectos son imprescindibles?">
-        </div>
-        <div id="add-q-opciones-wrap" class="add-q-field">
-          <label>Opciones iniciales</label>
-          <div class="add-q-opts-container" id="add-q-opts-container">
-            <div class="add-q-opt-row">
-              <input type="text" placeholder="Opción 1">
-              <button class="btn-remove" type="button">✕</button>
+      <!-- PROPONER NUEVA SECCIÓN -->
+      <div class="card" id="add-question-card">
+        <div class="card-title"><span class="num">+</span> Ampliar el cuestionario</div>
+        <button class="add-opt-trigger" id="btn-toggle-add-q" type="button">+ Proponer una nueva pregunta al grupo</button>
+        <div class="add-q-form" id="add-q-form">
+          <div class="add-q-field">
+            <label>Tipo de pregunta</label>
+            <select id="add-q-tipo">
+              <option value="checkbox">Selección múltiple (Checkbox)</option>
+              <option value="voto-ponderado">Votación con puntos (-1, +1, +3)</option>
+              <option value="radio">Selección única (Radio)</option>
+              <option value="casas">Listado de casas (Nombre + Precio + URL)</option>
+              <option value="slider">Rango numérico (Slider)</option>
+              <option value="horarios">Horarios por franjas (quedadas)</option>
+              <option value="disponibilidad">Calendario y fechas (Disponibilidad)</option>
+              <option value="textarea">Texto libre</option>
+            </select>
+          </div>
+          <div class="add-q-field">
+            <label>Texto de la pregunta</label>
+            <input type="text" id="add-q-label" placeholder="p.ej. ¿Qué aspectos son imprescindibles?">
+          </div>
+          <div id="add-q-opciones-wrap" class="add-q-field">
+            <label>Opciones iniciales</label>
+            <div class="add-q-opts-container" id="add-q-opts-container">
+              <div class="add-q-opt-row">
+                <input type="text" placeholder="Opción 1">
+                <button class="btn-remove" type="button">✕</button>
+              </div>
+            </div>
+            <button class="btn-add-q-opt" type="button" id="btn-add-q-opt">+ Opción</button>
+          </div>
+          <div id="add-q-slider-wrap" style="display:none" class="add-q-field">
+            <label>Configuración del rango</label>
+            <div class="slider-config">
+              <div><label>Mínimo</label><input type="number" id="aq-min" value="0"></div>
+              <div><label>Máximo</label><input type="number" id="aq-max" value="100"></div>
+              <div><label>Paso</label><input type="number" id="aq-step" value="10"></div>
             </div>
           </div>
-          <button class="btn-add-q-opt" type="button" id="btn-add-q-opt">+ Opción</button>
-        </div>
-        <div id="add-q-slider-wrap" style="display:none" class="add-q-field">
-          <label>Configuración del rango</label>
-          <div class="slider-config">
-            <div><label>Mínimo</label><input type="number" id="aq-min" value="0"></div>
-            <div><label>Máximo</label><input type="number" id="aq-max" value="100"></div>
-            <div><label>Paso</label><input type="number" id="aq-step" value="10"></div>
+          <div id="add-q-horarios-wrap" style="display:none" class="add-q-field">
+            <label>Duración ideal del plan (horas)</label>
+            <input type="number" id="aq-dur" value="3" min="1" max="12">
+            <label style="margin-top:10px">Franjas horarias del grupo</label>
+            <div id="aq-franjas-host"></div>
+          </div>
+          <!-- Condición opcional «mostrar solo si…»: el editor lo pinta
+               secciones.js (buildCondEditor) y forms.js lo lee al enviar. -->
+          <div id="add-q-cond-host" class="cond-editor-host"></div>
+          <button class="btn-propose" type="button" id="btn-submit-new-q">Proponer al grupo →</button>
+          <div class="add-q-field">
+            <label>Descripción (opcional)</label>
+            <textarea id="add-q-desc" rows="2" maxlength="500" placeholder="Texto explicativo bajo el título…"></textarea>
           </div>
         </div>
-        <div id="add-q-horarios-wrap" style="display:none" class="add-q-field">
-          <label>Duración ideal del plan (horas)</label>
-          <input type="number" id="aq-dur" value="3" min="1" max="12">
-          <label style="margin-top:10px">Franjas horarias del grupo</label>
-          <div id="aq-franjas-host"></div>
+      </div>
+
+      <!-- AUSENCIAS -->
+      <div class="card" id="ausencias-card" style="display:none">
+        <div class="card-title"><span class="num">👥</span> Probabilidades de asistencia</div>
+        <p class="aus-note">Los votos son públicos y alimentan la simulación Monte Carlo de resiliencia del viaje.</p>
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">¿Quién crees que es más probable que se caiga del plan? <span style="font-size:0.78rem">(puedes votarte a ti mismo)</span></div>
+        <div class="options-list" id="aus-respondentes-list"></div>
+        <div class="aus-prob">
+          <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">¿Cuánta probabilidad hay de que vayas tú?</div>
+          <div class="price-display" id="aus-prob-display">80%</div>
+          <input type="range" id="aus-prob-slider" min="0" max="100" step="5" value="80">
+          <div class="price-labels"><span>0%</span><span>50%</span><span>100%</span></div>
         </div>
-        <button class="btn-propose" type="button" id="btn-submit-new-q">Proponer al grupo →</button>
-        <div class="add-q-field">
-          <label>Descripción (opcional)</label>
-          <textarea id="add-q-desc" rows="2" maxlength="500" placeholder="Texto explicativo bajo el título…"></textarea>
+        <div class="aus-votos" id="aus-votos-publicos" style="display:none">
+          <h4>Votos del grupo</h4>
+          <div id="aus-votos-candidatos"></div>
         </div>
       </div>
-    </div>
+    </main><!-- /sec-main -->
 
-    <!-- AUSENCIAS -->
-    <div class="card" id="ausencias-card" style="display:none">
-      <div class="card-title"><span class="num">👥</span> Probabilidades de asistencia</div>
-      <p class="aus-note">Los votos son públicos y alimentan la simulación Monte Carlo de resiliencia del viaje.</p>
-      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">¿Quién crees que es más probable que se caiga del plan? <span style="font-size:0.78rem">(puedes votarte a ti mismo)</span></div>
-      <div class="options-list" id="aus-respondentes-list"></div>
-      <div class="aus-prob">
-        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">¿Cuánta probabilidad hay de que vayas tú?</div>
-        <div class="price-display" id="aus-prob-display">80%</div>
-        <input type="range" id="aus-prob-slider" min="0" max="100" step="5" value="80">
-        <div class="price-labels"><span>0%</span><span>50%</span><span>100%</span></div>
-      </div>
-      <div class="aus-votos" id="aus-votos-publicos" style="display:none">
-        <h4>Votos del grupo</h4>
-        <div id="aus-votos-candidatos"></div>
-      </div>
-    </div>
-
-    <!-- BARRA INFERIOR FIJA: navegación del asistente + botón de envío.
-         Acompaña al usuario durante todo el scroll (position: fixed). -->
-    <div class="wiz-nav submit-fab" id="wiz-nav">
-      <div class="wiz-progress" aria-hidden="true"><span class="wiz-bar-fill"></span></div>
-      <div class="wiz-nav-row">
-        <button type="button" class="wiz-btn" id="wiz-prev" aria-label="Pregunta anterior">
-          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+    <!-- BARRA INFERIOR FIJA: navegación por secciones + estado de sincronización.
+         El botón #sec-submit delega en el flujo de envío de answers.js;
+         #btn-generate queda oculto pero sigue siendo el "motor" del estado. -->
+    <div class="sec-nav" id="sec-nav">
+      <div class="sec-progress" aria-hidden="true"><span class="sec-bar-fill" id="sec-bar-fill"></span></div>
+      <div class="sec-nav-row">
+        <button type="button" class="sec-btn" id="sec-prev" aria-label="Sección anterior">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span class="sec-btn-txt">Anterior</span>
         </button>
-        <span class="wiz-label">1 / 1</span>
-        <button type="button" class="wiz-btn wiz-next-btn" id="wiz-next">
-          Siguiente <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        <span class="sec-pos" id="sec-pos" aria-live="polite">1 de 1</span>
+        <button type="button" class="sec-btn" id="sec-next">
+          <span class="sec-btn-txt">Siguiente</span> <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
         </button>
-        <span class="fab-sep"></span>
-        <button class="btn-generate fab-submit" id="btn-generate" type="button">Actualizar respuesta →</button>
+        <span class="sec-nav-sep"></span>
+        <button class="btn-generate sec-submit" id="sec-submit" type="button">Actualizar respuesta →</button>
+        <button class="btn-generate sec-engine" id="btn-generate" type="button" hidden aria-hidden="true">Actualizar respuesta →</button>
       </div>
-    </div>
-
-    <!-- Clon flotante del botón de envío para cuando la barra del asistente
-         no está visible; wizard.js lo mantiene sincronizado con #btn-generate. -->
-    <div class="submit-fab-clone" id="submit-fab">
-      <button class="btn-generate" id="btn-generate-fab" type="button">Actualizar respuesta →</button>
     </div>
 
   </div><!-- /view-survey -->
@@ -296,16 +299,15 @@
 <script src="src/js/sesion.js"></script>
 <script src="src/js/types.js"></script>
 <script src="src/js/questions.js"></script>
-<!-- wizard.js va DESPUÉS de questions/reformulario/answers: envuelve
-     renderAllQuestions y updateSubmitBtnLabel, así que necesita que ya existan -->
 <script src="src/js/proscontras.js"></script>
 <script src="src/js/ausencias.js"></script>
 <script src="src/js/forms.js"></script>
 <script src="src/js/answers.js"></script>
 <script src="src/js/reformulario.js"></script>
-<!-- ?v=N fuerza una descarga fresca: rompe el cache del navegador que servía
-     copias antiguas de estos scripts (crash del login por wizardGetFlag) -->
-<script src="src/js/wizard.js?v=2"></script>
+<!-- Cuestionario por secciones (raíl, barra inferior, condiciones «mostrarSi»):
+     módulo con funciones EXPLÍCITAS llamado desde main.js y enterSurvey().
+     Sin monkeypatching; sustituye al antiguo wizard.js. -->
+<script src="src/js/secciones.js?v=2"></script>
 <script src="src/js/mapa.js"></script>
 <script src="src/js/cuenta.js"></script>
 <script src="src/js/debate.js"></script>

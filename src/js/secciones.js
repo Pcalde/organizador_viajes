@@ -66,37 +66,47 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
   const selNeg = document.createElement('select'); selNeg.className = 'cond-neg';
   selNeg.innerHTML = '<option value="">si</option><option value="1">no</option>';
 
-  const candidates = (schemaArr || []).filter(q =>
-    q.id !== currentQid && q.tipo !== 'textarea' &&
-    (!currentQid || schemaArr.findIndex(x => x.id === q.id) < schemaArr.findIndex(x => x.id === currentQid)));
+  // Candidatas: preguntas ANTERIORES a `currentQid` en el orden (regla
+  // anti-ciclos). Con `currentQid` vacío (pregunta nueva → se añade al final)
+  // cualquier pregunta con opciones sirve. textarea/disponibilidad/horarios
+  // no tienen opciones, así que quedan fuera automáticamente.
+  const ci = currentQid ? schemaArr.findIndex(x => x.id === currentQid) : -1;
+  const candidates = (schemaArr || []).filter((q, i) =>
+    q.id !== currentQid && (q.opciones || []).length > 0 &&
+    (ci < 0 || i < ci));
 
   const fillQ = () => {
     selQ.innerHTML = '<option value="">Sin condición</option>' +
       candidates.map(q => `<option value="${esc(q.id)}">${esc(q.label)}</option>`).join('');
     if (cur && cur.qid && candidates.some(q => q.id === cur.qid)) selQ.value = cur.qid;
   };
-  const OPS_FOR = tipo =>
-    tipo === 'checkbox' || tipo === 'casas' ? ['incluye'] :
-    tipo === 'voto-ponderado' ? ['incluye', 'igual'] :
-    tipo === 'radio' ? ['igual'] : [];
+  // 'alguno' admite una lista de valores; aquí se representa como «incluye
+  // CUALQUIERA de…» y se guarda como {op:'alguno', valor:[...]}.
+  const OPS_FOR = q =>
+    !q ? [] :
+    q.tipo === 'checkbox' || q.tipo === 'casas' ? ['incluye', 'alguno'] :
+    q.tipo === 'voto-ponderado' ? ['incluye', 'igual', 'alguno'] :
+    q.tipo === 'radio' ? ['igual'] : [];
 
   const fillOps = q => {
-    const ops = OPS_FOR(q ? q.tipo : '');
+    const ops = OPS_FOR(q);
     selOp.innerHTML = ops.map(o => `<option value="${o}">${
-      o === 'incluye' ? 'incluye la opción' : o === 'igual' ? 'es exactamente' : 'es'}</option>`).join('');
-    if (cur && cur.qid === (q && q.id) && ops.includes(cur.op)) selOp.value = cur.op;
+      o === 'incluye' ? 'incluye la opción' : o === 'alguno' ? 'incluye CUALQUIERA de…' : 'es exactamente'}</option>`).join('');
+    if (cur && q && cur.qid === q.id && ops.includes(cur.op)) selOp.value = cur.op;
   };
-  const optValsOf = q => {
-    if (!q) return [];
-    if (q.tipo === 'voto-ponderado') return (q.opciones || []).map(op => optVal(q, op));
-    return (q.opciones || []).map(op => optVal(q, op));
-  };
+  const optValsOf = q => (q && q.opciones ? q.opciones : []).map(op => optVal(q, op));
   const fillVals = q => {
     const vals = optValsOf(q);
+    const multi = selOp.value === 'alguno';
+    selVal.multiple = multi;
+    selVal.size = multi ? Math.min(Math.max(vals.length, 2), 6) : 1;
     selVal.innerHTML = vals.length
       ? vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('')
       : '<option value="">(esta pregunta no tiene opciones aún)</option>';
-    if (cur && cur.qid === (q && q.id) && vals.includes(String(cur.valor))) selVal.value = String(cur.valor);
+    if (cur && q && cur.qid === q.id) {
+      const list = (Array.isArray(cur.valor) ? cur.valor : [cur.valor]).map(String);
+      [...selVal.options].forEach(o => { o.selected = list.includes(o.value); });
+    }
   };
 
   const sync = () => {
@@ -106,6 +116,10 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
     fillOps(q); fillVals(q);
   };
   selQ.addEventListener('change', sync);
+  selOp.addEventListener('change', () => {
+    const q = candidates.find(x => x.id === selQ.value) || null;
+    if (q) fillVals(q);
+  });
   fillQ(); sync();
 
   grid.append(selQ, selOp, selVal, selNeg);
@@ -113,7 +127,13 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
   return {
     read() {
       if (!selQ.value) return null;
-      const out = { qid: selQ.value, op: selOp.value || 'incluye', valor: selVal.value };
+      const multi = selOp.value === 'alguno';
+      const valor = multi
+        ? [...selVal.selectedOptions].map(o => o.value).filter(Boolean)
+        : selVal.value;
+      if (multi && !valor.length) return null; // «alguno» sin valores = sin condición
+      if (!multi && !valor) return null;       // pregunta sin opciones aún
+      const out = { qid: selQ.value, op: selOp.value || 'incluye', valor };
       if (selNeg.value === '1') out.no = true;
       return out;
     },
@@ -122,7 +142,7 @@ function buildCondEditor(host, schemaArr, currentQid, initial) {
 }
 
 // Valida una condición contra el esquema: la pregunta referida debe existir,
-// ir ANTES de `beforeIdx` en el orden y tener opciones compatibles.
+// ir ANTES de la propia en el orden y tener opciones compatibles.
 // Devuelve null si es válida, o un mensaje de error legible.
 function validarMostrarSi(cond, schemaArr, selfId, beforeIdx) {
   if (!cond || !cond.qid) return null; // sin condición = válido
@@ -136,43 +156,64 @@ function validarMostrarSi(cond, schemaArr, selfId, beforeIdx) {
   if (!['checkbox', 'voto-ponderado', 'radio', 'casas'].includes(src.tipo))
     return 'Las condiciones solo funcionan sobre checkbox, voto ponderado, radio o casas.';
   const vals = (src.opciones || []).map(op => optVal(src, op));
-  if (!vals.includes(String(cond.valor)))
-    return `El valor «${cond.valor}» no es una opción válida de «${src.label}».`;
+  const list = Array.isArray(cond.valor) ? cond.valor : [cond.valor];
+  if (!list.length) return 'Elige al menos un valor para la condición.';
+  for (const v of list) {
+    if (!vals.includes(String(v)))
+      return `El valor «${v}» no es una opción válida de «${src.label}».`;
+  }
   return null;
+}
+
+// ¿La pregunta `qid` depende (directa o transitivamente) de `depOn`? Se usa
+// al reordenar: mover una pregunta por encima de su fuente rompería la regla
+// anti-ciclos («solo condiciones sobre preguntas anteriores»).
+function condicionDependeDe(schemaArr, qid, depOn) {
+  let cur = schemaArr.find(q => q.id === qid);
+  const seen = new Set();
+  while (cur && cur.config && cur.config.mostrarSi && cur.config.mostrarSi.qid) {
+    const next = cur.config.mostrarSi.qid;
+    if (next === depOn) return true;
+    if (seen.has(next)) return false; // cadena corrupta con ciclo: no decidir
+    seen.add(next);
+    cur = schemaArr.find(q => q.id === next);
+  }
+  return false;
 }
 
 // ── Visibilidad condicional ─────────────────────────────────────────────────
 // Evalúa una respuesta cruda contra la condición. Soporta checkbox/casas
 // (array), voto-ponderado (dict; "incluye" ⇒ puntos > 0, "igual" ⇒ el punto
-// exacto) y radio (string u objeto {estado}).
+// exacto) y radio (string u objeto {estado}). `valor` puede ser un valor
+// suelto o una lista (operador 'alguno').
 function _condMatch(raw, op, valor) {
-  const v = String(valor);
+  const list = (Array.isArray(valor) ? valor : [valor]).map(String);
   if (raw == null) return false;
   switch (op) {
     case 'igual':
-      if (Array.isArray(raw)) return raw.map(String).includes(v);
+      if (Array.isArray(raw)) return raw.map(String).some(v => list.includes(v));
       if (typeof raw === 'object') {
-        if ('estado' in raw) return String(raw.estado) === v;
-        return Number(raw[v]) === Number(v); // voto-ponderado: la puntuación exacta
+        if ('estado' in raw) return list.includes(String(raw.estado));
+        // voto-ponderado: la puntuación de alguna opción coincide exactamente
+        return Object.entries(raw).some(([k, s]) => list.includes(k) && Number(s) === Number(list[0]));
       }
-      return String(raw) === v;
-    case 'alguno': {
-      const list = (Array.isArray(valor) ? valor : [valor]).map(String);
+      return list.includes(String(raw));
+    case 'alguno':
       if (Array.isArray(raw)) return raw.some(r => list.includes(String(r)));
       if (typeof raw === 'object') {
-        const dict = raw.estado ? normPond({ [raw.estado]: 1 }) : normPond(raw);
+        if ('estado' in raw) return list.includes(String(raw.estado));
+        const dict = normPond(raw);
         return list.some(k => Number(dict[k]) > 0);
       }
       return list.includes(String(raw));
-    }
     case 'incluye':
     default:
-      if (Array.isArray(raw)) return raw.map(String).includes(v);
+      if (Array.isArray(raw)) return raw.map(String).some(v => list.includes(v));
       if (typeof raw === 'object') {
-        if ('estado' in raw) return String(raw.estado) === v;
-        return Number(raw[v]) > 0; // voto-ponderado: puntuación > 0
+        if ('estado' in raw) return list.includes(String(raw.estado));
+        return list.some(k => Number(raw[k]) > 0); // voto-ponderado: puntuación > 0
       }
-      return String(raw) === v;
+      return list.includes(String(raw));
   }
 }
 
@@ -187,13 +228,48 @@ function esVisible(q, answers) {
   if (guard.has(q.id)) return true;
   guard.add(q.id);
   try {
-    const ok = _condMatch(st[q.id], cond.op || 'incluye', cond.valor);
+    // La fuente puede estar condicionada a su vez: se evalúa en cascada.
+    const srcQ = schema.find(x => x.id === cond.qid);
+    if (srcQ && !esVisible(srcQ, st)) return false;
+    const ok = _condMatch(st[cond.qid], cond.op || 'incluye', cond.valor);
     return cond.no ? !ok : ok;
   } catch (e) {
     return true;
   } finally {
     guard.delete(q.id);
   }
+}
+
+// Motivo legible por el que una pregunta está oculta (o '' si es visible).
+function secRazonOculta(q, answers) {
+  const cond = q && q.config && q.config.mostrarSi;
+  if (!cond || !cond.qid) return '';
+  const st = answers || readState().answers;
+  const src = schema.find(x => x.id === cond.qid);
+  if (!src) return 'la pregunta de su condición ya no existe';
+  if (!esVisible(src, st)) return `porque «${src.label}» tampoco aplica`;
+  const valTxt = Array.isArray(cond.valor) ? cond.valor.join(' / ') : String(cond.valor);
+  return `porque «${src.label}» ${cond.no ? 'no ' : ''}${cond.op === 'igual' ? 'es' : 'no incluye'} «${valTxt}»`;
+}
+
+// Avisa a la tarjeta ACTIVA de que sus respuestas no se enviarán (está oculta
+// por condición). Se re-evalúa en cada cambio vía refreshSecciones().
+function updateHiddenNotice() {
+  const container = $('questions-container');
+  if (!container) return;
+  [...container.querySelectorAll(':scope > .card[data-qid]')].forEach(card => {
+    card.querySelectorAll('.sec-hidden-notice').forEach(n => n.remove());
+  });
+  const q = schema[SEC_ESTADO.idx];
+  if (!q || esVisible(q)) return;
+  const card = cardFor(q.id);
+  if (!card) return;
+  const n = div('sec-hidden-notice');
+  n.innerHTML = '<i class="fa-solid fa-eye-slash" aria-hidden="true"></i> <b>No aplica</b> con tus respuestas actuales ' +
+    esc(secRazonOculta(q)) + '. Tus cambios se guardan, pero no se envían al grupo.';
+  const controls = card.querySelector('.options-list');
+  if (controls && controls.parentElement === card) card.insertBefore(n, controls);
+  else card.appendChild(n);
 }
 
 // Preguntas visibles (referencias reales de `schema`, con su índice original).
@@ -204,6 +280,21 @@ function visibleQuestions() {
   schema.forEach((q, i) => {
     if (esVisible(q, getSt().answers)) out.push({ q, i });
   });
+  return out;
+}
+
+// ¿Tiene la pregunta una condición «mostrarSi» (aunque esté rota)? Sirve para
+// distinguir en el reformulario «no aplica con tus respuestas» de «sin datos».
+function tieneCondicion(q) {
+  return !!(q && q.config && q.config.mostrarSi && q.config.mostrarSi.qid);
+}
+
+// IDs de preguntas ocultas según un borrador de respuestas. Con `draft` se
+// evalúa sobre ese objeto; sin él, sobre el estado actual del formulario.
+function hiddenQuestionIds(draft) {
+  const st = draft && draft.answers ? draft : { answers: draft || readState().answers };
+  const out = new Set();
+  schema.forEach(q => { if (!esVisible(q, st.answers)) out.add(q.id); });
   return out;
 }
 
@@ -270,6 +361,7 @@ function applySectionPaging() {
   });
   renderRail();
   renderBottomBar();
+  updateHiddenNotice();
 }
 
 // Recalcula todo tras cualquier cambio que pueda alterar visibilidad/estados.
@@ -277,6 +369,35 @@ function refreshSecciones() {
   if (activeMode !== 'survey') return;
   applySectionPaging();
   decorateSectionStats();
+}
+
+// Cambios de esquema desde el servidor que afectan a las condiciones:
+//   · Una condición cuyo qid ya no existe se limpia (edit_pregunta) para no
+//     dejar secciones ocultas permanentemente por datos huérfanos.
+//   · Si la pregunta activa quedó oculta o eliminada, el raíl salta a la
+//     primera visible.
+// Se llama desde polling.js cuando `schemaChanged` (los cambios locales pasan
+// por los flujos de questions.js/forms.js, que ya validan y refrescan).
+function syncCondicionesTrasCambioEsquema() {
+  const ids = new Set(schema.map(q => q.id));
+  schema.forEach(q => {
+    const cond = q.config && q.config.mostrarSi;
+    if (!cond || !cond.qid || ids.has(cond.qid)) return;
+    delete q.config.mostrarSi;
+    if (user) {
+      apiAuth({
+        action: 'edit_pregunta',
+        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+        questionId: q.id, label: q.label, config: q.config,
+      }).catch(e => console.warn('No se pudo limpiar la condición de', q.id, e));
+    }
+  });
+  const visIds = new Set(visibleQuestions().map(v => v.q.id));
+  if (!visIds.has(schema[SEC_ESTADO.idx] && schema[SEC_ESTADO.idx].id)) {
+    const first = visibleQuestions()[0];
+    SEC_ESTADO.idx = first ? first.i : 0;
+  }
+  refreshSecciones();
 }
 
 // ── Estado de respuesta de una pregunta (para el raíl ✓/○) ─────────────────

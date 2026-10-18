@@ -113,6 +113,16 @@ function resetAddQuestionForm() {
   aqGetFranjas = buildFranjasEditor($('aq-franjas-host'), FRANJAS_HORARIAS);
   $('aq-dur').value = 3;
   $('add-q-desc').value = '';
+  rebindAddQCond(); // editor de condición limpio (sobre el esquema actual)
+}
+
+// Reconstruye el editor «mostrar solo si…» del formulario de pregunta nueva.
+// Sin `currentQid`: la pregunta se añadirá al final, así que puede depender
+// de cualquier pregunta existente con opciones. Se expone en host._getCond().
+function rebindAddQCond() {
+  const host = $('add-q-cond-host');
+  if (!host || typeof buildCondEditor !== 'function') return;
+  host._getCond = buildCondEditor(host, schema, null, null).read;
 }
 
 async function submitNewQuestion() {
@@ -149,6 +159,21 @@ async function submitNewQuestion() {
   }
   const desc = $('add-q-desc').value.trim();
   if (desc) config.descripcion = desc;
+
+  // Condición «mostrar solo si…» del editor de #add-q-cond-host. La pregunta
+  // nueva se añade AL FINAL del orden, así que cualquier fuente existente es
+  // "anterior" y la validación anti-ciclos pasa con beforeIdx = schema.length.
+  const condHost = $('add-q-cond-host');
+  if (condHost && typeof condHost._getCond === 'function') {
+    const cond = condHost._getCond();
+    if (cond) {
+      const errCond = typeof validarMostrarSi === 'function'
+        ? validarMostrarSi(cond, schema, null, schema.length) : null;
+      if (errCond) { showStatus(errCond, 'err', 6000); return; }
+      config.mostrarSi = cond;
+    }
+  }
+
   const pregunta = { id, tipo, label, opciones, config };
 
   // Optimista, con rollback
@@ -157,6 +182,8 @@ async function submitNewQuestion() {
   if (card) $('questions-container').appendChild(card);
   $('add-q-form').classList.remove('open');
   resetAddQuestionForm();
+  // La sección nueva entra en el raíl/barra (y si es condicional, visible ya).
+  if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
 
   try {
     await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta });
@@ -168,11 +195,18 @@ async function submitNewQuestion() {
     const i = schema.indexOf(pregunta);
     if (i >= 0) schema.splice(i, 1);
     showStatus('No se pudo crear la pregunta: ' + e.message, 'err');
+    if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
   }
 }
 
 function bindForms() {
-  $('btn-toggle-add-q').addEventListener('click', () => $('add-q-form').classList.toggle('open'));
+  $('btn-toggle-add-q').addEventListener('click', () => {
+    const f = $('add-q-form');
+    const opening = !f.classList.contains('open');
+    f.classList.toggle('open');
+    // Al abrir, el editor de condición se pinta con el esquema actual.
+    if (opening) rebindAddQCond();
+  });
   $('btn-submit-new-q').addEventListener('click', submitNewQuestion);
 
   $('add-q-tipo').addEventListener('change', function () {
