@@ -350,6 +350,52 @@ function tieneCondicion(q) {
   return !!(q && q.config && q.config.mostrarSi && q.config.mostrarSi.qid);
 }
 
+// ── Ayudas de sección reutilizadas por questions.js / forms.js ──────────────
+// Lista de nombres de sección existentes en el esquema (para poblar los
+// desplegables «Sección» del editor de preguntas y del formulario alta).
+function nombresDeSecciones() {
+  const out = [];
+  seccionesDelEsquema().forEach(s => { if (s.nombre) out.push(s.nombre); });
+  return out;
+}
+
+// Tarjeta «marca» (config.esEncabezado) de una sección, o null.
+function secHeaderPara(nombre) {
+  const key = _secNormNombre(nombre);
+  if (!key) return null;
+  return schema.find(q => q.config && q.config.esEncabezado &&
+    _secNormNombre(q.config.seccion || q.label) === key) || null;
+}
+
+// Inserta `card` en el contenedor justo después de la tarjeta de `beforeQ`
+// (o al principio si no hay referencia). Mantiene DOM y esquema alineados:
+// polling/syncSchemaToDOM solo añaden/quitan tarjetas, nunca las reubican,
+// así que el orden visual depende exclusivamente de estas inserciones.
+function insertCardTras(card, beforeQ) {
+  const cont = $('questions-container');
+  if (!cont || !card) return;
+  const beforeEl = beforeQ ? cardFor(beforeQ.id) : null;
+  if (beforeEl && beforeEl.parentElement === cont) beforeEl.after(card);
+  else cont.appendChild(card);
+}
+
+// Navegar a la sección por nombre ('' = sin sección / primera suelta).
+function goToSectionDeNombre(nombre) {
+  const secs = seccionesDelEsquema();
+  const key = _secNormNombre(nombre);
+  const sec = key ? secs.find(s => _secNormNombre(s.nombre) === key) : null;
+  if (sec) {
+    const idx = _secPrimeraVisible(sec, readState().answers);
+    if (idx >= 0) { goToSection(idx); return; }
+  }
+  if (!nombre) {
+    // «Sin sección»: ir a la primera pregunta suelta del esquema.
+    const i = schema.findIndex(q => !(q.config && q.config.seccion));
+    if (i >= 0) { goToSection(i); return; }
+  }
+  refreshSecciones();
+}
+
 // IDs de preguntas ocultas según un borrador de respuestas. Con `draft` se
 // evalúa sobre ese objeto; sin él, sobre el estado actual del formulario.
 function hiddenQuestionIds(draft) {
@@ -506,48 +552,192 @@ function _secHasAnswer(raw, tipo) {
 }
 
 // ── Raíl de secciones ───────────────────────────────────────────────────────
+// El raíl pinta SECCIONES (agrupaciones de config.seccion), no preguntas:
+// cada entrada muestra el título de la sección, su estado global (✓ si todas
+// sus preguntas visibles están respondidas, ⌀ si ninguna aplica, ●/○ en otro
+// caso) y una sublista con las preguntas que contiene. Al pie: «+ Nueva
+// sección» y el ajuste «lo que responde el grupo».
 function renderRail() {
   const rail = $('sec-rail');
   if (!rail) return;
   rail.innerHTML = '';
   if (!schema.length) {
     rail.innerHTML = '<div class="sec-rail-empty">Sin secciones todavía</div>';
+    rail.appendChild(secAddSectionButton());
+    rail.appendChild(secGroupInfoRow());
     return;
   }
-  const st = readState();
-  const visIds = new Set(visibleQuestions().map(v => v.q.id));
-  schema.forEach((q, i) => {
+  const st = readState().answers;
+  const secs = seccionesDelEsquema();
+  const cur = _secDeIdx(SEC_ESTADO.idx, secs);
+  let shownNum = 0;
+  secs.forEach((sec, si) => {
+    const items = _secItemsVisibles(sec, st);
+    const allHidden = sec.items.length > 0 && items.length === 0 && sec.encabezadoIdx < 0;
+    const answered = items.length > 0 && items.every(it => _secHasAnswer(st[it.q.id], it.q.tipo));
+    const active = cur === sec;
+    if (!allHidden) shownNum++;
+
     const b = document.createElement('button');
     b.type = 'button';
-    const visible = visIds.has(q.id);
-    const answered = _secHasAnswer(st.answers[q.id], q.tipo);
-    const active = i === SEC_ESTADO.idx;
-    b.className = 'sec-rail-item' + (active ? ' active' : '') +
-                  (!visible ? ' not-applicable' : '');
+    b.className = 'sec-rail-item' + (active ? ' active' : '') + (allHidden ? ' not-applicable' : '');
     b.setAttribute('aria-current', active ? 'step' : 'false');
-    const statusIcon = !visible ? '⌀' : answered ? '✓' : active ? '●' : '○';
-    const num = String(i + 1).padStart(2, '0');
+    const statusIcon = allHidden ? '⌀' : answered ? '✓' : active ? '●' : '○';
+    const num = String(shownNum || 1).padStart(2, '0');
     b.innerHTML =
       `<span class="sec-rail-status" aria-hidden="true">${statusIcon}</span>` +
       `<span class="sec-rail-num">${num}</span>` +
-      `<span class="sec-rail-label">${esc(q.label)}</span>` +
-      (!visible ? '<span class="sec-rail-na">no aplica</span>' : '');
-    b.title = visible ? q.label : q.label + ' — no aplica con las respuestas actuales';
-    b.addEventListener('click', () => goToSection(i));
+      `<span class="sec-rail-label">${esc(sec.titulo)}</span>` +
+      (allHidden ? '<span class="sec-rail-na">no aplica</span>' : '');
+    b.title = allHidden ? sec.titulo + ' — no aplica con las respuestas actuales' : sec.titulo;
+    b.addEventListener('click', () => {
+      const idx = _secPrimeraVisible(sec, st);
+      if (idx >= 0) goToSection(idx);
+    });
+
+    // Sublista de preguntas de la sección (navegación fina dentro de ella).
+    if (items.length) {
+      const sub = div('sec-rail-sub');
+      items.forEach(it => {
+        const s = document.createElement('button');
+        s.type = 'button';
+        s.className = 'sec-rail-subitem' + (it.i === SEC_ESTADO.idx ? ' current' : '');
+        const dot = _secHasAnswer(st[it.q.id], it.q.tipo) ? '✓' : it.i === SEC_ESTADO.idx ? '●' : '·';
+        s.innerHTML = `<span class="sub-dot">${dot}</span><span class="sub-txt">${esc(it.q.label)}</span>`;
+        s.title = it.q.label;
+        s.addEventListener('click', e => { e.stopPropagation(); goToSection(it.i); });
+        sub.appendChild(s);
+      });
+      b.appendChild(sub);
+    }
     rail.appendChild(b);
   });
+
+  rail.appendChild(secAddSectionButton());
+  rail.appendChild(secGroupInfoRow());
 }
 
-// ── Barra inferior fija: Anterior · n de N · Siguiente · Enviar ────────────
+// Botón «+ Nueva sección» del pie del raíl: pide un nombre de forma inline
+// (sin window.prompt) y crea una tarjeta «marca» (textarea informativa con
+// config.esEncabezado + config.seccion) que da identidad al grupo en el raíl.
+function secAddSectionButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'sec-rail-add';
+  btn.textContent = '+ Nueva sección';
+  btn.addEventListener('click', () => {
+    btn.style.display = 'none';
+    const form = div('sec-rail-add-form');
+    form.innerHTML =
+      '<input type="text" maxlength="60" placeholder="Nombre de la sección">' +
+      '<div class="sec-rail-add-actions">' +
+        '<button type="button" class="btn-pc sec-aa-cancel" type="button">Cancelar</button>' +
+        '<button type="button" class="btn-propose sec-aa-ok">Crear →</button>' +
+      '</div>';
+    railInsertAfter(btn, form);
+    const inp = form.querySelector('input');
+    inp.focus();
+    const close = () => { form.remove(); btn.style.display = ''; };
+    form.querySelector('.sec-aa-cancel').addEventListener('click', close);
+    const crear = async () => {
+      const nombre = inp.value.trim();
+      if (!nombre) { inp.focus(); return; }
+      close();
+      await crearSeccion(nombre);
+    };
+    form.querySelector('.sec-aa-ok').addEventListener('click', crear);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') crear();
+      if (e.key === 'Escape') close();
+    });
+  });
+  return btn;
+}
+function railInsertAfter(anchor, node) {
+  const rail = $('sec-rail');
+  if (!rail) return;
+  const groupinfo = rail.querySelector('.sec-groupinfo-row');
+  if (groupinfo) rail.insertBefore(node, groupinfo);
+  else rail.appendChild(node);
+}
+
+// Crea la tarjeta «marca» de una sección nueva (optimista + add_pregunta).
+async function crearSeccion(nombre) {
+  if (!user) { showStatus('Inicia sesión para crear secciones', 'err'); return; }
+  const id = 'seccion_' + nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) + '_' + Date.now().toString(36);
+  const pregunta = { id, tipo: 'textarea', label: nombre, opciones: [],
+                     config: { esEncabezado: true, seccion: nombre, descripcion: '' } };
+  schema.push(pregunta);
+  const card = buildQuestionCard(pregunta, schema.length - 1);
+  const cont = $('questions-container');
+  if (card && cont) {
+    // Colocar la marca justo antes de la primera pregunta ya asignada a esta
+    // sección (si existe), para que DOM y esquema queden alineados.
+    const key = String(nombre).trim().toLowerCase();
+    const firstInSec = schema.find(x => x.id !== id && x.config && !x.config.esEncabezado &&
+      String(x.config.seccion || '').trim().toLowerCase() === key);
+    if (firstInSec) insertCardTras(card, firstInSec);
+    else cont.appendChild(card);
+  }
+  const emptyNotice = cont && cont.querySelector('[data-empty-notice]');
+  if (emptyNotice) emptyNotice.remove();
+  // Ir directamente a la sección nueva aunque todavía no tenga preguntas
+  // visibles (la tarjeta «marca» es suficiente para navegar hasta ella).
+  SEC_ESTADO.idx = schema.length - 1;
+  applySectionPaging();
+  renderRail();
+  renderBottomBar();
+  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
+  try {
+    await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre,
+                    pinHash: user.pinHash, pregunta });
+    lastRaw = '';
+    await pollOnce();
+    showStatus(`Sección «${nombre}» creada. Añade preguntas y asígnalas desde ✎.`, 'ok', 6000);
+  } catch (e) {
+    if (card) card.remove();
+    const i = schema.indexOf(pregunta);
+    if (i >= 0) schema.splice(i, 1);
+    showStatus('No se pudo crear la sección: ' + e.message, 'err');
+    refreshSecciones();
+  }
+}
+
+// Fila de ajuste «lo que responde el grupo» (visible/plegado/esperar).
+function secGroupInfoRow() {
+  const row = div('sec-groupinfo-row');
+  row.innerHTML =
+    '<label for="sec-groupinfo-mode">Grupo:</label>' +
+    '<select id="sec-groupinfo-mode">' +
+      '<option value="visible">Mostrar siempre</option>' +
+      '<option value="plegado">Plegado</option>' +
+      '<option value="esperar">Tras responder</option>' +
+    '</select>';
+  const sel = row.querySelector('select');
+  sel.value = getGroupInfoMode();
+  sel.addEventListener('change', () => setGroupInfoMode(sel.value));
+  return row;
+}
+
+// ── Barra inferior fija: Anterior · sección n/N · Siguiente · Enviar ───────
+// La unidad de navegación es la SECCIÓN (agrupación de config.seccion), no la
+// pregunta: «2 de 5» cuenta secciones con contenido aplicable.
 function renderBottomBar() {
   const bar = $('sec-nav');
   if (!bar) return;
   bar.classList.toggle('visible', activeMode === 'survey');
-  const vis = visibleQuestions();
-  const total = Math.max(vis.length, 1);
-  const pos = Math.max(1, vis.findIndex(v => v.i === SEC_ESTADO.idx) + 1);
+  const st = readState().answers;
+  const secs = seccionesDelEsquema();
+  const cur = _secDeIdx(SEC_ESTADO.idx, secs) || secs[0];
+  // Secciones navegables = las que tienen al menos una tarjeta para mostrar
+  // (preguntas visibles o la propia marca de encabezado).
+  const navSecs = secs.filter(s => s.items.some(it =>
+    !it.q.config?.esEncabezado ? esVisible(it.q, st) : true));
+  const total = Math.max(navSecs.length, 1);
+  let pos = Math.max(1, navSecs.indexOf(cur) + 1);
   const label = $('sec-pos');
-  if (label) label.textContent = `${pos} de ${total}`;
+  if (label) label.textContent = `Sección ${pos} de ${total}`;
   const fill = $('sec-bar-fill');
   if (fill) fill.style.width = ((pos / total) * 100) + '%';
   const prev = $('sec-prev'), next = $('sec-next');
