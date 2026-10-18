@@ -478,10 +478,11 @@ function applySectionPaging() {
   const cur = _secDeIdx(SEC_ESTADO.idx, secs) || secs[0];
   let activeIds = null;
   if (cur) {
-    // Si la activa es la primera visible pero existe una «marca», mostrarla
-    // junto a las preguntas para que el usuario vea el encabezado de la sección.
+    // Preguntas visibles de la sección + su tarjeta «marca» SIEMPRE que el
+    // índice activo sea de esa misma sección (la marca no es una pregunta
+    // «visible» normal, pero es la página de las secciones sin preguntas).
     activeIds = new Set(_secItemsVisibles(cur, st).map(it => it.q.id));
-    if (cur.encabezadoIdx >= 0 && cur.items.some(it => it.i === SEC_ESTADO.idx)) {
+    if (cur.encabezadoIdx >= 0 && _secDeIdx(SEC_ESTADO.idx, secs) === cur) {
       activeIds.add(schema[cur.encabezadoIdx].id);
     }
     if (!activeIds.size && cur.items.length) activeIds.add(cur.items[0].q.id);
@@ -682,18 +683,17 @@ async function crearSeccion(nombre) {
   }
   const emptyNotice = cont && cont.querySelector('[data-empty-notice]');
   if (emptyNotice) emptyNotice.remove();
-  // Ir directamente a la sección nueva aunque todavía no tenga preguntas
-  // visibles (la tarjeta «marca» es suficiente para navegar hasta ella).
-  SEC_ESTADO.idx = schema.length - 1;
-  applySectionPaging();
-  renderRail();
-  renderBottomBar();
-  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
   try {
     await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre,
                     pinHash: user.pinHash, pregunta });
     lastRaw = '';
     await pollOnce();
+    // Navegar a la sección nueva tras el guardado real (usa el índice fresco
+    // del esquema sincronizado). Aunque todavía no tenga preguntas visibles,
+    // la tarjeta «marca» es suficiente para navegar hasta ella.
+    if (typeof goToSectionDeNombre === 'function') goToSectionDeNombre(nombre);
+    else refreshSecciones();
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
     showStatus(`Sección «${nombre}» creada. Añade preguntas y asígnalas desde ✎.`, 'ok', 6000);
   } catch (e) {
     if (card) card.remove();

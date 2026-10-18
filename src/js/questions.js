@@ -379,7 +379,8 @@ function syncSchemaToDOM() {
       if (!validOptVals.has(el.dataset.val)) el.remove();
     });
 
-    // Añadir opciones nuevas
+    // Añadir opciones nuevas (op puede ser objeto enriquecido {nombre, geo…};
+    // addOption lo acepta tal cual y preserva los datos extra)
     (q.opciones || []).forEach(op => {
       if (!findItem(card, optVal(q, op))) type.addOption(card, q, op, false);
     });

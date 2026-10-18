@@ -26,11 +26,23 @@ function pcParts() {
 var lastHorariosRange = null;
 
 function addGeoFieldsToDrawer(drawer, rawOp) {
+  // Normaliza geo a texto para el input: puede venir como string (formato
+  // antiguo), como objeto {texto, lat, lng} (lo que devuelve getGeo y guarda
+  // _san_opcion en el servidor) o faltar del todo.
+  const g = rawOp && typeof rawOp === 'object' ? rawOp.geo : null;
+  let geoTxt = '';
+  if (typeof g === 'string') geoTxt = g;
+  else if (g && typeof g === 'object') {
+    geoTxt = String(g.texto || '');
+    if (!geoTxt && isFinite(Number(g.lat)) && isFinite(Number(g.lng))) {
+      geoTxt = `${g.lat},${g.lng}`;
+    }
+  }
   const geoHost = div('opt-edit-field');
   geoHost.style.cssText = 'flex:2;min-width:200px';
   geoHost.innerHTML = `
     <label>📍 Destino para el mapa</label>
-    <input type="text" class="inp-eo-geo" value="${esc(rawOp.geo || '')}" placeholder="Calle, ciudad o coordenadas «40.4168,-3.7038»">
+    <input type="text" class="inp-eo-geo" value="${esc(geoTxt)}" placeholder="Calle, ciudad o coordenadas «40.4168,-3.7038»">
     <div class="geo-preview" style="display:none"></div>
     <div style="display:flex;gap:6px;margin-top:6px">
       <button type="button" class="btn-pc btn-geo-search">🔎 Buscar en el mapa</button>
@@ -643,7 +655,9 @@ var TIPOS = {
   checkbox: {
     build(card, q) {
       const list = div('options-list'); list.dataset.qid = q.id;
-      (q.opciones || []).forEach(op => list.appendChild(createOptItem(q.id, optVal(q, op))));
+      // _rawOptPara preserva el objeto enriquecido ({nombre, precio, geo…})
+      // para que el drawer reabra con los datos intactos y guardar no los borre.
+      (q.opciones || []).forEach(op => list.appendChild(createOptItem(q, _rawOptPara(q, op))));
       card.append(list, createAddOptForm(q));
     },
     read: card => checkedValues(card),
@@ -654,7 +668,7 @@ var TIPOS = {
     addOption(card, q, op, select) {
       const list = card.querySelector('.options-list');
       if (!list) return null;
-      const item = createOptItem(q.id, optVal(q, op));
+      const item = createOptItem(q, _rawOptPara(q, op));
       if (select) item.querySelector('input').checked = true;
       list.appendChild(item);
       return item;
@@ -670,7 +684,7 @@ var TIPOS = {
         <span class="rule-pill" data-rule="-1">✕ Veto (-1): <b>1 disp.</b></span>
       `;
       const list = div('options-list'); list.dataset.qid = q.id;
-      (q.opciones || []).forEach(op => list.appendChild(createPondItem(q.id, optVal(q, op))));
+      (q.opciones || []).forEach(op => list.appendChild(createPondItem(q, _rawOptPara(q, op))));
       card.append(rulesBar, list, createAddOptForm(q));
     },
     read(card) {
@@ -693,7 +707,7 @@ var TIPOS = {
     addOption(card, q, op) {
       const list = card.querySelector('.options-list');
       if (!list) return null;
-      const item = createPondItem(q.id, optVal(q, op));
+      const item = createPondItem(q, _rawOptPara(q, op));
       list.appendChild(item);
       return item;
     },
