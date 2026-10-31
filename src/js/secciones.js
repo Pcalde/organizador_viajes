@@ -1122,3 +1122,104 @@ function initSecciones() {
 
 // Hook global opcional: otros módulos pueden avisar de que cambió algo.
 window.onSecChange = refreshSecciones;
+
+// ── Lista de gestión de secciones (#sec-manage-list, tarjeta «Secciones del
+//    cuestionario» en forms.js/index.html) ───────────────────────────────────
+// Render de todas las secciones con sus acciones (✏️ renombrar · 🗑 eliminar ·
+// ➕ añadir pregunta aquí). Se repinta desde refreshSecciones().
+function renderSecManageList() {
+  const host = $('sec-manage-list');
+  if (!host) return;
+  host.innerHTML = '';
+  const secs = seccionesDelEsquema();
+  if (!secs.length) {
+    host.innerHTML = '<div class="sec-manage-empty">Sin secciones todavía: crea la primera con el botón de arriba.</div>';
+    return;
+  }
+  const st = readState().answers;
+  secs.forEach((sec, i) => {
+    const row = div('sec-manage-item');
+    const nPreg = sec.items.filter(it => !(it.q.config && it.q.config.esEncabezado)).length;
+    const nom = sec.nombre || sec.titulo;
+    const meta = document.createElement('span');
+    meta.className = 'sec-manage-meta';
+    meta.innerHTML =
+      `<span class="sec-manage-num">${String(i + 1).padStart(2, '0')}</span>` +
+      `<button type="button" class="sec-manage-nombre" title="Ir a esta sección">${esc(sec.titulo)}</button>` +
+      `<span class="sec-manage-count">${nPreg} preg. · ${_secItemsVisibles(sec, st).length} visibles</span>`;
+    meta.querySelector('.sec-manage-nombre').addEventListener('click', () => {
+      const idx = _secPrimeraVisible(sec, st);
+      if (idx >= 0) goToSection(idx);
+    });
+
+    const tools = div('sec-manage-tools');
+    const mk = (txt, title, cls, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sec-rail-tool' + (cls ? ' ' + cls : '');
+      b.textContent = txt; b.title = title;
+      b.addEventListener('click', e => { e.stopPropagation(); fn(b, row); });
+      tools.appendChild(b);
+      return b;
+    };
+    mk('✏️', 'Renombrar sección «' + sec.titulo + '»', '', (b, row) => secManageAbrirRename(row, sec));
+    mk('➕', 'Añadir pregunta en «' + sec.titulo + '»', '', () => abrirAddPreguntaEnSeccion(nom));
+    mk('🗑', 'Eliminar sección «' + sec.titulo + '»', 'sec-rail-delete', (b, row) => secManageAbrirDelete(row, sec));
+
+    row.append(meta, tools);
+    host.appendChild(row);
+  });
+}
+
+// Renombrar inline desde la lista de gestión (mismo flujo que el menú 🗂).
+function secManageAbrirRename(row, sec) {
+  let form = row.querySelector('.sec-rail-rename-form');
+  if (form) { form.remove(); return; }         // toggle
+  form = div('sec-rail-rename-form');
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.maxLength = 60; inp.value = sec.nombre || sec.titulo;
+  inp.setAttribute('aria-label', 'Nuevo nombre de la sección');
+  const ok = document.createElement('button');
+  ok.type = 'button'; ok.className = 'btn-propose sec-rm-ok'; ok.textContent = 'Guardar';
+  const cancel = document.createElement('button');
+  cancel.type = 'button'; cancel.className = 'btn-pc sec-rm-cancel'; cancel.textContent = 'Cancelar';
+  form.append(inp, ok, cancel);
+  row.appendChild(form);
+  inp.focus(); inp.select();
+  const run = async () => {
+    const nuevo = inp.value.trim();
+    if (!nuevo) { inp.focus(); return; }
+    ok.disabled = true; ok.textContent = 'Guardando…';
+    await renombrarSeccion(sec.nombre || sec.titulo, nuevo);
+  };
+  ok.addEventListener('click', run);
+  cancel.addEventListener('click', () => form.remove());
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); run(); }
+    if (e.key === 'Escape') form.remove();
+  });
+}
+
+// Eliminar inline desde la lista de gestión (aviso claro, dos pasos).
+function secManageAbrirDelete(row, sec) {
+  let box = row.querySelector('.sec-rail-del-confirm');
+  if (box) { box.remove(); return; }
+  const nPreg = sec.items.filter(it => !(it.q.config && it.q.config.esEncabezado)).length;
+  box = div('sec-rail-del-confirm');
+  box.innerHTML =
+    `<div class="sec-rail-del-txt">¿Eliminar la <b>sección «${esc(sec.titulo)}»</b>? ` +
+    (nPreg
+      ? `Sus <b>${nPreg}</b> pregunta${nPreg === 1 ? '' : 's'} NO se borran: pasarán a «Sin sección».`
+      : 'Solo se eliminará su marca del raíl (la sección está vacía).') +
+    ` Se aplica para todo el grupo.</div>` +
+    '<div class="sec-rail-del-actions">' +
+      '<button type="button" class="btn-pc sec-rd-cancel">Cancelar</button>' +
+      '<button type="button" class="btn-pc btn-pc-contra sec-rd-ok">Sí, eliminar sección</button>' +
+    '</div>';
+  row.appendChild(box);
+  box.querySelector('.sec-rd-cancel').addEventListener('click', () => box.remove());
+  box.querySelector('.sec-rd-ok').addEventListener('click', async e => {
+    const okBtn = box.querySelector('.sec-rd-ok');
+    okBtn.disabled = true; okBtn.textContent = 'Eliminando…';
+    await eliminarSeccion(sec.nombre || sec.titulo);
+  });
+}

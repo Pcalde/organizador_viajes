@@ -257,6 +257,74 @@ async function submitNewQuestion() {
   }
 }
 
+// ── NUEVA SECCIÓN (tarjeta #add-section-card + lista #sec-manage-list) ──────
+// Crea la marca de la sección (crearSeccion, ahora awaited) y, si se
+// cumplimentó el bloque opcional, una primera pregunta dentro de ella en
+// secuencia (primero la marca: así la pregunta llega a un grupo ya existente).
+async function submitNewSection() {
+  if (!user) return;
+  const nombre = ($('add-sec-nombre').value || '').trim();
+  if (!nombre) { $('add-sec-nombre').focus(); showStatus('Escribe el nombre de la sección', 'err'); return; }
+  const btn = $('btn-submit-new-sec');
+  btn.disabled = true; btn.textContent = 'Creando…';
+
+  // Primera pregunta opcional (se construye ANTES de crear la marca para que
+  // los fallos de validación no dejen una sección huérfana a medias).
+  let primera = null;
+  const qLabel = ($('add-sec-q-label').value || '').trim();
+  if (qLabel) {
+    const tipo = $('add-sec-q-tipo').value;
+    const slug = qLabel.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
+    const opcionesTextos = [...$('add-sec-q-opts-container').querySelectorAll('input[type=text]')]
+      .map(i => i.value.trim()).filter(Boolean);
+    let opciones = [], config = {};
+    if (tipo === 'slider') {
+      config = { min: 0, max: 100, step: 10, default: 50 };
+    } else if (tipo === 'radio') {
+      opciones = opcionesTextos.map(t => t.replace(/\|/g, '/'));
+    } else if (tipo !== 'textarea') {
+      opciones = opcionesTextos;
+    }
+    config.seccion = nombre;
+    primera = { id: slug + '_' + Date.now().toString(36), tipo, label: qLabel, opciones, config };
+  }
+
+  try {
+    await crearSeccion(nombre);            // crea la marca (optimista + add_pregunta)
+    if (primera) {
+      schema.push(primera);
+      const card = buildQuestionCard(primera, schema.length - 1);
+      insertCardTras(card, null);
+      try {
+        await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre,
+                        pinHash: user.pinHash, pregunta: primera });
+        lastRaw = '';
+      } catch (e2) {
+        if (card) card.remove();
+        const i = schema.indexOf(primera);
+        if (i >= 0) schema.splice(i, 1);
+        showStatus('La sección se creó, pero la primera pregunta no: ' + e2.message, 'err', 7000);
+      }
+    } else {
+      showStatus(`Sección «${nombre}» creada`, 'ok', 3000);
+    }
+    // Limpiar el formulario y cerrar la tarjeta de creación.
+    $('add-sec-nombre').value = '';
+    $('add-sec-q-label').value = '';
+    $('add-sec-q-opts-container').innerHTML =
+      '<div class="add-q-opt-row"><input type="text" placeholder="Opción 1"><button class="btn-remove" type="button">✕</button></div>';
+    $('add-sec-form').classList.remove('open');
+    goToSectionDeNombre(nombre);
+    await pollOnce();
+    if (typeof refreshSecciones === 'function') refreshSecciones();
+  } catch (e) {
+    showStatus('No se pudo crear la sección: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Crear sección →';
+  }
+}
+
 function bindForms() {
   $('btn-toggle-add-q').addEventListener('click', () => {
     const f = $('add-q-form');
@@ -267,6 +335,37 @@ function bindForms() {
     if (opening) { rebindAddQSeccion(); rebindAddQCond(); }
   });
   $('btn-submit-new-q').addEventListener('click', submitNewQuestion);
+
+  // ── Tarjeta «Secciones del cuestionario» (#add-section-card) ──
+  const btnToggleSec = $('btn-toggle-add-sec');
+  if (btnToggleSec) {
+    btnToggleSec.addEventListener('click', () => $('add-sec-form').classList.toggle('open'));
+  }
+  const btnSubmitSec = $('btn-submit-new-sec');
+  if (btnSubmitSec) btnSubmitSec.addEventListener('click', submitNewSection);
+  const inpSecNom = $('add-sec-nombre');
+  if (inpSecNom) inpSecNom.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submitNewSection(); }
+  });
+  const selSecQTipo = $('add-sec-q-tipo');
+  if (selSecQTipo) selSecQTipo.addEventListener('change', function () {
+    $('add-sec-q-opts-wrap').style.display =
+      ['checkbox', 'radio', 'voto-ponderado'].includes(this.value) ? 'block' : 'none';
+  });
+  const btnSecOpt = $('btn-add-sec-q-opt');
+  if (btnSecOpt) btnSecOpt.addEventListener('click', () => {
+    const cont = $('add-sec-q-opts-container');
+    const row  = div('add-q-opt-row');
+    row.innerHTML = `<input type="text" placeholder="Opción ${cont.children.length + 1}"><button class="btn-remove" type="button">✕</button>`;
+    cont.appendChild(row);
+  });
+  const contSecOpts = $('add-sec-q-opts-container');
+  if (contSecOpts) contSecOpts.addEventListener('click', e => {
+    if (e.target.classList.contains('btn-remove')) e.target.closest('.add-q-opt-row').remove();
+  });
+  // Lista de gestión 🗂 (render definido en secciones.js; aquí solo el primer
+  // pintado tras cargar el esquema — refreshSecciones la repinta después).
+  if (typeof renderSecManageList === 'function') renderSecManageList();
 
   const aqSecSel = $('add-q-seccion');
   if (aqSecSel) aqSecSel.addEventListener('change', syncAddQSeccionField);
