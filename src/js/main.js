@@ -158,7 +158,7 @@ function bindCreateTripUI() {
       btnCreate.disabled = true;
       btnCreate.textContent = 'Creando viaje…';
       try {
-        const pinHash = await sha256(pin + '|' + eid);
+        const pinHash = NO_PIN
         const res = await api({
           action: 'crear_encuesta',
           eid, nombre, pinHash, plantilla, titulo,
