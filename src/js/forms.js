@@ -115,7 +115,7 @@ function rebindAddQSeccion() {
   const nombres = (typeof nombresDeSecciones === 'function') ? nombresDeSecciones() : [];
   sel.innerHTML = '<option value="">Sin sección (aparece suelta en el raíl)</option>' +
     nombres.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
-    `<option value="${AQ_SEC_NUEVA}">＋ Crear sección nueva…</option>`;
+    `<option value="${AQ_SEC_NUEVA}">+ Crear sección nueva…</option>`;
   const inp = $('add-q-seccion-nombre');
   if (inp) inp.value = '';
   syncAddQSeccionField();
@@ -363,7 +363,7 @@ function bindForms() {
   if (contSecOpts) contSecOpts.addEventListener('click', e => {
     if (e.target.classList.contains('btn-remove')) e.target.closest('.add-q-opt-row').remove();
   });
-  // Lista de gestión 🗂 (render definido en secciones.js; aquí solo el primer
+  // Lista de gestión de secciones (render definido en secciones.js; el primer
   // pintado tras cargar el esquema — refreshSecciones la repinta después).
   if (typeof renderSecManageList === 'function') renderSecManageList();
 

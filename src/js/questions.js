@@ -45,9 +45,9 @@ function buildQuestionCard(q, idx) {
 
   const actions = div('card-q-actions');
   const btnEdit = document.createElement('button');
-  btnEdit.type = 'button'; btnEdit.className = 'btn-icon-subtle'; btnEdit.title = 'Editar pregunta'; btnEdit.textContent = '✎';
+  btnEdit.type = 'button'; btnEdit.className = 'btn-icon-subtle'; btnEdit.title = 'Editar pregunta'; btnEdit.innerHTML = '<i class="fa-solid fa-pen" aria-hidden="true"></i>';
   const btnDel  = document.createElement('button');
-  btnDel.type  = 'button'; btnDel.className  = 'btn-icon-subtle danger'; btnDel.title = 'Eliminar pregunta'; btnDel.textContent = '🗑';
+  btnDel.type  = 'button'; btnDel.className  = 'btn-icon-subtle danger'; btnDel.title = 'Eliminar pregunta'; btnDel.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
 
   const mkMove = (txt, title, dir) => {
   const b = document.createElement('button');
@@ -55,7 +55,7 @@ function buildQuestionCard(q, idx) {
   b.addEventListener('click', () => moverPregunta(q.id, dir));
   return b;
   };
-  actions.append(mkMove('▲', 'Subir', -1), mkMove('▼', 'Bajar', 1), btnEdit, btnDel);
+  actions.append(mkMove('<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>', 'Subir', -1), mkMove('<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>', 'Bajar', 1), btnEdit, btnDel);
   header.append(title, actions);
   card.appendChild(header);
 
@@ -118,7 +118,7 @@ function buildQuestionCard(q, idx) {
     const __newVal = '__nueva__';
     const optNueva = document.createElement('option');
     optNueva.value = __newVal;
-    optNueva.textContent = '＋ Crear sección nueva…';
+    optNueva.textContent = '+ Crear sección nueva…';
     selSec.appendChild(optNueva);
     const syncSecField = () => {
       inpSec.style.display = selSec.value === __newVal ? '' : 'none';

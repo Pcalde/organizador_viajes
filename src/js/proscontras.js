@@ -44,7 +44,7 @@ function buildPCRow(e) {
   row.append(tipo, txt, aut, cred);
   if (mine) {
     row.append(btn('pc-act', '✎', 'Editar (reinicia los votos)', () => editPC(e, txt)),
-               btn('pc-act', '🗑', 'Borrar', ev => delPC(e, ev.currentTarget)));
+               btn('pc-act', '<i class="fa-solid fa-trash" aria-hidden="true"></i>', 'Borrar', ev => delPC(e, ev.currentTarget)));
   } else {
     row.append(btn('pc-act' + (miVoto === 1 ? ' active' : ''), '👍', 'De acuerdo', () => votePC(e, 1)),
                btn('pc-act neg' + (miVoto === -1 ? ' active' : ''), '👎', 'En desacuerdo', () => votePC(e, -1)));
@@ -92,7 +92,7 @@ function editPC(e, txtEl) {
 async function delPC(e, b) {
   if (!b.dataset.armed) {                                  // doble clic de confirmación
     b.dataset.armed = '1'; b.textContent = '¿Borrar?';
-    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = '🗑'; } }, 3000);
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>'; } }, 3000);
     return;
   }
   try {
