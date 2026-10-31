@@ -184,10 +184,21 @@ function buildModelData() {
     const hor = qHor ? extractAnswer(ans, qHor) : null;
 
     const diasMax = Math.max(1, parseInt((disp && disp.diasMax) ?? ans.diasMax ?? (qDisp ? 5 : 1), 10) || 1);
-    const soloFinde = !!(disp && disp.soloFinde);
-    const irYVenir  = !!(disp && disp.irYVenir);
-    const meDaIgual = !!(disp && disp.meDaIgual);
-    const prefPuente = !!(disp && disp.preferirPuente);
+    const prefs = Array.isArray(disp && disp.preferencias) ? disp.preferencias : null;
+    const preferenciaPlan = prefs
+      ? (prefs.find(x => String(x).startsWith('plan:')) || 'plan:indiferente').slice(5)
+      : (disp && disp.irYVenir && !disp.meDaIgual ? 'dia' : 'indiferente');
+    const preferenciaDias = prefs
+      ? (prefs.find(x => String(x).startsWith('dias:')) || 'dias:indiferente').slice(5)
+      : (disp && disp.soloFinde ? 'solo_finde' : disp && disp.soloEntreSemana ? 'solo_semana' : 'indiferente');
+    const preferenciaFestivos = prefs
+      ? (prefs.find(x => String(x).startsWith('festivos:')) || 'festivos:indiferente').slice(9)
+      : (disp && disp.preferirPuente ? 'puente' : 'indiferente');
+    const soloFinde = preferenciaDias === 'solo_finde';
+    const soloEntreSemana = preferenciaDias === 'solo_semana';
+    const irYVenir = preferenciaPlan === 'dia';
+    const meDaIgual = preferenciaPlan === 'indiferente';
+    const prefPuente = preferenciaFestivos === 'puente';
     const rangos = (disp && Array.isArray(disp.rangos)) ? disp.rangos : (ans.rangosFechas || []);
 
     // ── CRUCE DE FUENTES: fechas de disponibilidad + franjas de horarios ──
@@ -222,6 +233,9 @@ function buildModelData() {
     // Filtro "solo fines de semana" aplicado a la unión/cruce resultante
     if (soloFinde && conjuntoFechas.size) {
       conjuntoFechas = new Set([...conjuntoFechas].filter(isWeekendISO));
+    }
+    if (soloEntreSemana && conjuntoFechas.size) {
+      conjuntoFechas = new Set([...conjuntoFechas].filter(f => !isWeekendISO(f)));
     }
     if (conjuntoFechas.size === 0) {
       // Fallback: sin fechas en ninguna de las dos fuentes, la última franja horaria
@@ -279,6 +293,10 @@ function buildModelData() {
       transporte: String(estadoTrans || '').trim().toLowerCase(),
       plazasLibres,
       soloFinde,
+      soloEntreSemana,
+      preferenciaPlan,
+      preferenciaDias,
+      preferenciaFestivos,
       conjuntoFechas,
       casasParsed,
       opcionesList,
@@ -317,7 +335,7 @@ function buildModelData() {
   });
 
   // Dentro de buildModelData() en js/reformulario.js, reemplaza el final por:
-  const hayPlanDia = viajeros.some(v => v.diasMax === 1 || v.irYVenir || v.conjuntoFechas.size === 1);
+  const hayPlanDia = viajeros.some(v => v.diasMax === 1 || v.preferenciaPlan === 'dia' || v.conjuntoFechas.size === 1);
   const lMinEval = hayPlanDia ? 1 : 2;
   const lMaxEval = Math.min(12, Math.max(lMinEval, ...viajeros.map(v => v.diasMax)));
   const nLog = viajeros.filter(v => v.tieneLogistica).length;
@@ -657,12 +675,11 @@ function ejecutarMotorFactibilidad(model) {
 
   const lMin = model.lMinEval || 1; // Permite evaluar excursiones de 1 día (L = 1)
 
-  // Núcleo con reglas de la capa A: pernocta exige L ≥ 2 y diaMax suficiente;
-  // "ir y venir" solo participa en excursiones (L = 1) salvo "me da igual".
+  // Las preferencias de tipo de viaje orientan el ranking, sin descartar una
+  // ventana factible solo porque no coincida con la opción preferida.
   function nucleoPernocta(L, diasRango) {
     return viajeros
-      .filter(v => !(v.irYVenir && !v.meDaIgual && L > 1) &&
-                   v.diasMax >= L && diasRango.every(d => matriz[d][v.nombre] === 1))
+      .filter(v => v.diasMax >= L && diasRango.every(d => matriz[d][v.nombre] === 1))
       .map(v => v.nombre);
   }
 
@@ -752,6 +769,9 @@ function ejecutarMotorFactibilidad(model) {
       }).sort((a, b) => (Number(b.viable) - Number(a.viable)) || (b.votos - a.votos) || (a.p_coop - b.p_coop));
 
       const incluyeFinde = diasRango.some(isSatSunISO);
+      const afinidadPlan = dfAsig.reduce((n, v) => n + (
+        (v.preferenciaPlan === 'dia' && L === 1) || (v.preferenciaPlan === 'noche' && L > 1) ? 1 : 0
+      ), 0);
 
       candidatosBrutos.push({
         L,
@@ -759,6 +779,7 @@ function ejecutarMotorFactibilidad(model) {
         fFin,
         diasRango,
         incluyeFinde,
+        afinidadPlan,
         cruceHorario: cruceHor.solape,
         excursion: esExcursion || (L === 1 && viajeros.some(v => v.irYVenir && nucleoSet.has(v.nombre))),
         N: nTotal,
@@ -778,9 +799,10 @@ function ejecutarMotorFactibilidad(model) {
     }
   }
 
-  // Ordenar priorizando mayor asistencia total N, mayor núcleo N_full, mayor duración L y mejor objetivo
+  // Priorizar asistencia y núcleo, y después el ajuste a preferencias de plan.
   candidatosBrutos.sort((a, b) =>
-    (b.N - a.N) || (b.N_full - a.N_full) || (b.L - a.L) || (a.objetivo - b.objetivo)
+    (b.N - a.N) || (b.N_full - a.N_full) || (b.afinidadPlan - a.afinidadPlan) ||
+    (b.L - a.L) || (a.objetivo - b.objetivo)
   );
 
   // Filtrar soluciones redundantes (subventanas dominadas en el mismo rango con igual o menor gente)
@@ -1012,32 +1034,32 @@ function buildExecutiveSummaryCard(model, soluciones, topo) {
   return card;
 }
 
-// ── TABLA DE PREFERENCIAS BOOLEANAS POR VIAJERO ─────────────────────────────
-// Muestra de un vistazo quién votó ir y venir, quién prefiere solo finde,
-// quién no tiene preferencia de día y quién prefiere puente. Sin emojis:
-// celdas con check/cruz y color según el caso.
+// ── PREFERENCIAS DE DISPONIBILIDAD POR VIAJERO ──────────────────────────────
 function buildPreferenciasBooleanasCard(model) {
   const card = div('card pref-bool-card');
 
   if (!model.viajeros.length) {
     card.innerHTML = `
-      <div class="card-title"><span class="num">P</span> Preferencias booleanas</div>
+      <div class="card-title"><span class="num">P</span> Preferencias de disponibilidad</div>
       <p style="color:var(--muted);font-size:0.85rem">Sin viajeros con fechas válidas todavía.</p>`;
     return card;
   }
 
   const cols = [
     { key: 'diasMax',      label: 'Días máx.',   type: 'num' },
-    { key: 'irYVenir',     label: 'Ir y venir',  type: 'bool' },
-    { key: 'soloFinde',    label: 'Solo finde',  type: 'bool' },
-    { key: 'meDaIgual',    label: 'Me da igual', type: 'bool' },
-    { key: 'preferirPuente', label: 'Preferir puente', type: 'bool' },
+    { key: 'preferenciaPlan', label: 'Tipo de viaje', type: 'pref', values: { dia: 'Ir y volver en el día', noche: 'Una noche o más', indiferente: 'Me da igual' } },
+    { key: 'preferenciaDias', label: 'Días', type: 'pref', values: { solo_finde: 'Solo fines de semana', solo_semana: 'Solo entre semana', indiferente: 'Me da igual' } },
+    { key: 'preferenciaFestivos', label: 'Festivos', type: 'pref', values: { puente: 'Mejor festivo / puente', indiferente: 'Me es igual' } },
     { key: '_horarios',    label: 'Horarios',    type: 'tri' },
     { key: '_fechas',      label: 'Fechas',      type: 'tri' },
   ];
 
   const cellHtml = (v, col) => {
     if (col.type === 'num') return `<td><b>${v.diasMax}</b></td>`;
+    if (col.type === 'pref') {
+      const label = col.values[v[col.key]] || 'Me da igual';
+      return `<td class="pb-neutral">${esc(label)}</td>`;
+    }
     if (col.type === 'bool') {
       const on = !!v[col.key];
       return `<td class="${on ? 'pb-yes' : 'pb-no'}">${on ? 'Sí' : 'No'}</td>`;
@@ -1050,7 +1072,7 @@ function buildPreferenciasBooleanasCard(model) {
   };
 
   card.innerHTML = `
-    <div class="card-title"><span class="num">P</span> Preferencias booleanas por viajero</div>
+    <div class="card-title"><span class="num">P</span> Preferencias de disponibilidad</div>
     <p style="font-size:0.82rem;color:var(--muted);margin-bottom:10px">
       Estado declarado por cada participante. Las columnas "Horarios" y "Fechas" indican
       qué fuentes alimentan el cruce de soluciones del motor: un viajero sin una de ellas

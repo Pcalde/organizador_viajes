@@ -29,7 +29,8 @@ Cada viajero $v$ declara:
 
 - un conjunto de fechas disponibles $D_v \subseteq T$ (unión de intervalos $[\,\text{desde}, \text{hasta}\,]$);
 - una cota máxima de días consecutivos $\delta_v \in \mathbb{N}$ (`diasMax`);
-- una preferencia booleana de fin de semana $s_v \in \{0,1\}$ (`soloFinde`);
+- una preferencia de días $p_v \in \{\text{solo finde},\text{solo entre semana},\text{indiferente}\}$;
+- una preferencia de tipo de viaje (ida y vuelta, pernocta o indiferente), usada para ordenar soluciones;
 - una opción de transporte con capacidad $c_v \in \mathbb{N}$ (plazas libres, $c_v = 0$ si no conduce);
 - un presupuesto máximo por persona $p_v \in \mathbb{R}_{\ge 0}$.
 
@@ -84,8 +85,8 @@ $\text{traj}(v) \in \mathcal{T}_v$ y eligiendo una por viajero mediante variable
 $y_{vk} \in \{0,1\}$ con $\sum_k y_{vk} \le 1$ y $x_{tv} = \sum_k y_{vk}\,\mathbb{1}[t \in \text{traj}_k(v)]$.
 
 **(R4) Núcleo de pernocta:** un viajero pertenece al núcleo si está disponible *todos* los días
-de la ventana y su $\delta_v \ge L$ (para $L \ge 2$); quien vota «ir y venir» solo participa en
-excursiones de un día ($L = 1$):
+de la ventana y su $\delta_v \ge L$. La preferencia por ir y volver o pernoctar orienta el orden
+de las soluciones, pero no descarta una ventana que sí sea factible:
 
 $$
 \mathcal{N}(W) = \{\, v \in V : \delta_v \ge L \ \wedge\ A_{tv} = 1\ \forall t \in W \,\},

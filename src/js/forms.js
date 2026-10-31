@@ -70,7 +70,7 @@ async function submitNewOpcion(q, valor, inp) {
   triggerSave();
 
   try {
-    await apiPost({ action: 'add_opcion', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, opcion: valor });
+    await mutate(() => apiPost({ action: 'add_opcion', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, opcion: valor }));
   } catch (e) {
     if (item) item.remove();
     const i = q.opciones.indexOf(valor);
@@ -95,7 +95,7 @@ async function submitNewCasa(q, casa) {
   triggerSave();
 
   try {
-    await apiPost({ action: 'add_opcion', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, opcion: casa });
+    await mutate(() => apiPost({ action: 'add_opcion', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, questionId: q.id, opcion: casa }));
   } catch (e) {
     if (item) item.remove();
     const i = q.opciones.indexOf(casa);
@@ -105,37 +105,6 @@ async function submitNewCasa(q, casa) {
 }
 
 // ── NUEVA PREGUNTA ──────────────────────────────────────────────────────────
-// Desplegable «Sección» del formulario de pregunta nueva. Las opciones son las
-// secciones existentes (marcas + nombres usados por preguntas sueltas); la
-// última entrada permite crear una sección nueva escribiendo su nombre.
-const AQ_SEC_NUEVA = '__nueva__';
-function rebindAddQSeccion() {
-  const sel = $('add-q-seccion');
-  if (!sel) return;
-  const nombres = (typeof nombresDeSecciones === 'function') ? nombresDeSecciones() : [];
-  sel.innerHTML = '<option value="">Sin sección (aparece suelta en el raíl)</option>' +
-    nombres.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
-    `<option value="${AQ_SEC_NUEVA}">＋ Crear sección nueva…</option>`;
-  const inp = $('add-q-seccion-nombre');
-  if (inp) inp.value = '';
-  syncAddQSeccionField();
-}
-
-function syncAddQSeccionField() {
-  const sel = $('add-q-seccion'), inp = $('add-q-seccion-nombre');
-  if (!sel || !inp) return;
-  inp.style.display = sel.value === AQ_SEC_NUEVA ? '' : 'none';
-  if (sel.value !== AQ_SEC_NUEVA) inp.value = '';
-}
-
-// Nombre de sección elegido en el formulario ('' = sin sección).
-function aqSeccionElegida() {
-  const sel = $('add-q-seccion');
-  if (!sel) return '';
-  if (sel.value === AQ_SEC_NUEVA) return ($('add-q-seccion-nombre').value || '').trim();
-  return sel.value;
-}
-
 function resetAddQuestionForm() {
   $('add-q-label').value = '';
   const cont = $('add-q-opts-container');
@@ -144,17 +113,6 @@ function resetAddQuestionForm() {
   aqGetFranjas = buildFranjasEditor($('aq-franjas-host'), FRANJAS_HORARIAS);
   $('aq-dur').value = 3;
   $('add-q-desc').value = '';
-  rebindAddQSeccion(); // desplegable de secciones al día
-  rebindAddQCond(); // editor de condición limpio (sobre el esquema actual)
-}
-
-// Reconstruye el editor «mostrar solo si…» del formulario de pregunta nueva.
-// Sin `currentQid`: la pregunta se añadirá al final, así que puede depender
-// de cualquier pregunta existente con opciones. Se expone en host._getCond().
-function rebindAddQCond() {
-  const host = $('add-q-cond-host');
-  if (!host || typeof buildCondEditor !== 'function') return;
-  host._getCond = buildCondEditor(host, schema, null, null).read;
 }
 
 async function submitNewQuestion() {
@@ -178,7 +136,7 @@ async function submitNewQuestion() {
     };
     if (config.max <= config.min) { showStatus('El máximo debe ser mayor que el mínimo', 'err'); return; }
     config.default = Math.round((config.min + config.max) / 2);
-    } else if (tipo === 'horarios') {
+  } else if (tipo === 'horarios') {
     const franjas = aqGetFranjas();
     if (!franjas.length) { showStatus('Define al menos una franja válida', 'err'); return; }
     config = { duracionIdeal: Math.max(1, Math.min(12, +$('aq-dur').value || 3)), franjas };
@@ -191,85 +149,38 @@ async function submitNewQuestion() {
   }
   const desc = $('add-q-desc').value.trim();
   if (desc) config.descripcion = desc;
-
-  // Condición «mostrar solo si…» del editor de #add-q-cond-host. La pregunta
-  // nueva se añade AL FINAL del orden, así que cualquier fuente existente es
-  // "anterior" y la validación anti-ciclos pasa con beforeIdx = schema.length.
-  const condHost = $('add-q-cond-host');
-  if (condHost && typeof condHost._getCond === 'function') {
-    const cond = condHost._getCond();
-    if (cond) {
-      const errCond = typeof validarMostrarSi === 'function'
-        ? validarMostrarSi(cond, schema, null, schema.length) : null;
-      if (errCond) { showStatus(errCond, 'err', 6000); return; }
-      config.mostrarSi = cond;
-    }
-  }
-
   const pregunta = { id, tipo, label, opciones, config };
-  // Sección elegida en el desplegable (o nombre nuevo escrito a mano). La
-  // tarjeta «marca» de una sección nueva se crea aquí mismo si no existe.
-  const secElegida = aqSeccionElegida();
-  if (secElegida) {
-    config.seccion = secElegida;
-    if (typeof secHeaderPara === 'function' && !secHeaderPara(secElegida) &&
-        typeof crearSeccion === 'function') {
-      crearSeccion(secElegida);   // fire-and-forget: pollOnce traerá la marca
-    }
-  }
 
-  // Optimista, con rollback. Insertar AL FINAL del esquema, pero justo después
-  // de la última tarjeta visible de su sección (si la tiene), para que DOM y
-  // esquema coincidan hasta que llegue el orden definitivo del servidor.
-  schema.push(pregunta);
-  const card = buildQuestionCard(pregunta, schema.length - 1);
-  const contQ = $('questions-container');
-  if (card && contQ) {
-    let beforeEl = null;
-    if (secElegida) {
-      for (let j = schema.length - 2; j >= 0; j--) {
-        const x = schema[j];
-        if (!x.config || x.config.esEncabezado) continue;
-        if (String(x.config.seccion || '').trim().toLowerCase() !==
-            secElegida.trim().toLowerCase()) continue;
-        const c = cardFor(x.id);
-        if (c && c.parentElement === contQ) { beforeEl = c; break; }
-      }
-    }
-    if (beforeEl) beforeEl.after(card); else contQ.appendChild(card);
-  }
+  // Posición: justo después de la sección actual en modo asistente; al final si no.
+  const at = surveyWizardMode ? Math.min(wizIndex + 1, schema.length) : schema.length;
+
+  // Optimista, con rollback
+  saveDraft();                       // conserva lo respondido sin enviar
+  schema.splice(at, 0, pregunta);
+  syncSchemaToDOM();                 // crea la tarjeta, la coloca en su sitio y repagina
+  if (surveyWizardMode && typeof gotoWizSection === 'function') gotoWizSection(at);
   $('add-q-form').classList.remove('open');
   resetAddQuestionForm();
-  // La sección nueva entra en el raíl/barra (y si es condicional, visible ya).
-  if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
 
   try {
-    await apiPost({ action: 'add_pregunta', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash, pregunta });
-    // Refresca el snapshot (incluida la posición inicial asignada por SQL).
-    lastRaw = '';
-    await pollOnce();
+    await mutate(async () => {
+      const ident = { eid: user.eid, nombre: user.nombre, pinHash: user.pinHash };
+      await apiPost({ action: 'add_pregunta', ...ident, pregunta });
+      // El servidor la añade al final: si no va al final, reordenar.
+      if (at < schema.length - 1) {
+        await apiPost({ action: 'reordenar_preguntas', ...ident, ids: schema.map(x => x.id) });
+      }
+    });
   } catch (e) {
-    if (card) card.remove();
-    const i = schema.indexOf(pregunta);
-    if (i >= 0) schema.splice(i, 1);
+    schema = schema.filter(x => x.id !== pregunta.id);
+    syncSchemaToDOM();
     showStatus('No se pudo crear la pregunta: ' + e.message, 'err');
-    if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
   }
 }
 
 function bindForms() {
-  $('btn-toggle-add-q').addEventListener('click', () => {
-    const f = $('add-q-form');
-    const opening = !f.classList.contains('open');
-    f.classList.toggle('open');
-    // Al abrir, el desplegable de secciones y el editor de condición se
-    // pintan con el esquema actual.
-    if (opening) { rebindAddQSeccion(); rebindAddQCond(); }
-  });
+  $('btn-toggle-add-q').addEventListener('click', () => $('add-q-form').classList.toggle('open'));
   $('btn-submit-new-q').addEventListener('click', submitNewQuestion);
-
-  const aqSecSel = $('add-q-seccion');
-  if (aqSecSel) aqSecSel.addEventListener('change', syncAddQSeccionField);
 
   $('add-q-tipo').addEventListener('change', function () {
     const v = this.value;

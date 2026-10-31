@@ -10,7 +10,9 @@ const RPC = {
   submit_response: { fn: 'submit_response', args: b => ({ ...ident(b), p_answers: b.answers }) },
   vote_ausencia:   { fn: 'vote_ausencia',   args: b => ({ ...ident(b), p_candidatos: b.candidatos, p_prob: b.prob_propia }) },
   add_pregunta:    { fn: 'add_pregunta',    args: b => ({ ...ident(b), p_pregunta: b.pregunta }) },
-  edit_pregunta:   { fn: 'edit_pregunta',   args: b => ({ ...ident(b), p_qid: b.questionId, p_label: b.label, p_config: b.config || null }) },
+  // Enviar siempre los seis argumentos declarados en SQL. Si p_label queda
+  // omitido, PostgREST puede no resolver la firma con parámetros por defecto.
+  edit_pregunta:   { fn: 'edit_pregunta',   args: b => ({ ...ident(b), p_qid: b.questionId, p_label: b.label ?? null, p_config: b.config || null }) },
   delete_pregunta: { fn: 'delete_pregunta', args: b => ({ ...ident(b), p_qid: b.questionId }) },
   add_opcion:      { fn: 'add_opcion',      args: b => ({ ...ident(b), p_qid: b.questionId, p_opcion: b.opcion }) },
   edit_opcion:     { fn: 'edit_opcion',     args: b => ({ ...ident(b), p_qid: b.questionId, p_old_optkey: b.oldOptKey, p_nueva_opcion: b.nuevaOpcion }) },
