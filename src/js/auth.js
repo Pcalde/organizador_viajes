@@ -1,5 +1,12 @@
 // ── AUTH / SESIÓN ───────────────────────────────────────────────────────────
 
+// Conmutador Entrar ⇄ Crear del login. Vive en main.js (bindCreateTripUI);
+// auth.js lo necesita para forzar el modo «Entrar» al restaurar sesiones o
+// recibir enlaces de invitación. window.setLoginMode se enlaza allí.
+function _callSetLoginMode(isCreate) {
+  if (typeof window.setLoginMode === 'function') { try { window.setLoginMode(isCreate); } catch (e) {} }
+}
+
 function showLoginErr(msg) {
   const el = $('login-error');
   el.textContent = msg;

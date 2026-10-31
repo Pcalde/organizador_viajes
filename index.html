@@ -16,17 +16,29 @@
 
 <!-- ═══════════════════════ MENÚ INTERMEDIO: MIS VIAJES ══════════════════
      Perfil local (nombre + contraseña) con lista de viajes guardada en
-     localStorage. Desde aquí se entra a un viaje, se crea otro o se
-     accede con un enlace de invitación / código copiado. -->
+     localStorage. La credencial de cada viaje se guarda CIFRADA con la
+     contraseña del perfil (PBKDF2 + AES-GCM, ver js/perfil.js): sin ella no
+     se puede entrar a ningún viaje. Desde aquí se entra a un viaje, se crea
+     otro o se accede con un enlace de invitación / código copiado. -->
 <div id="trips-screen" style="display:none">
   <div class="login-wrap trips-wrap">
     <header>
       <h1>Cuestionador</h1>
       <p style="margin-top:12px;color:var(--muted);font-size:0.95rem">Mis viajes</p>
     </header>
-    <div class="card">
+    <!-- Bloqueo del perfil: se oculta tras verificar la contraseña -->
+    <div class="card trips-check-card" id="trips-check-card">
+      <div class="login-field">
+        <label for="trips-pass">Contraseña de tu perfil <span id="trips-check-nombre" style="color:var(--muted);font-size:0.78rem;font-weight:400"></span></label>
+        <input type="password" id="trips-pass" placeholder="••••" maxlength="64" autocomplete="current-password">
+      </div>
+      <button class="btn-generate" id="btn-trips-unlock" type="button">Desbloquear →</button>
+      <p class="trips-note">Tus accesos están cifrados en este dispositivo; solo tú puedes abrirlos con esta contraseña.</p>
+    </div>
+
+    <div class="card trips-main-card" id="trips-main-card">
       <div class="trips-profile-row">
-        <span class="trips-avatar" id="trips-avatar" aria-hidden="true">🙂</span>
+        <span class="trips-avatar" id="trips-avatar" aria-hidden="true"><i class="fa-solid fa-user-astronaut"></i></span>
         <div class="trips-profile-txt">
           <strong id="trips-nombre">—</strong>
           <button type="button" class="btn-link-like" id="btn-trips-logout">Cambiar de perfil / salir</button>
@@ -83,12 +95,22 @@
         <input type="checkbox" id="login-recordar" checked style="width:auto;margin:0">
         Recordar sesión en este dispositivo
       </label>
+      <!-- Al ENTRAR a un viaje existente: ofrece guardar el acceso en «Mis
+           viajes» cifrando la credencial con esta contraseña local. -->
+      <div class="login-field" id="login-perfil-wrap" style="display:none">
+        <label for="login-perfil-pass">Guardar en «Mis viajes» con tu contraseña local <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(opcional — cifra el acceso en este dispositivo)</span></label>
+        <input type="password" id="login-perfil-pass" placeholder="••••" maxlength="64" autocomplete="new-password">
+      </div>
 
       <!-- Campos extra solo al crear nuevo viaje -->
       <div id="create-trip-fields" style="display:none;flex-direction:column;gap:14px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">
         <div class="login-field" style="margin-bottom:0">
           <label for="login-titulo">Tí­tulo del viaje</label>
           <input type="text" id="login-titulo" placeholder="p.ej. Escapada Rural Diciembre" maxlength="80">
+        </div>
+        <div class="login-field" style="margin-bottom:0">
+          <label for="login-perfil-pass-nueva">Contraseña de tu perfil local <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(mínimo 4 caracteres — protege los accesos guardados en «Mis viajes»)</span></label>
+          <input type="password" id="login-perfil-pass-nueva" placeholder="••••" maxlength="64" autocomplete="new-password">
         </div>
         <div class="login-field" style="margin-bottom:0">
           <label for="login-plantilla">Plantilla inicial de preguntas</label>
@@ -383,7 +405,8 @@
 <script src="src/js/api.js?v=2"></script>
 <script src="src/js/state.js?v=2"></script>
 <script src="src/js/participants.js"></script>
-<script src="src/js/sesion.js"></script>
+<script src="src/js/sesion.js?v=2"></script>
+<script src="src/js/perfil.js?v=1"></script>
 <script src="src/js/types.js?v=4"></script>
 <script src="src/js/questions.js?v=5"></script>
 <script src="src/js/proscontras.js"></script>
@@ -399,7 +422,7 @@
 <script src="src/js/cuenta.js"></script>
 <script src="src/js/debate.js"></script>
 <script src="src/js/polling.js"></script>
-<script src="src/js/auth.js"></script>
+<script src="src/js/auth.js?v=2"></script>
 <script src="src/js/main.js?v=2"></script>
 </body>
 </html>

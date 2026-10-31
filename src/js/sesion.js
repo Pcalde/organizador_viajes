@@ -163,6 +163,13 @@ function clearSession() {
   _dropSessionRecord();
 }
 
+// ── caché de sesión para «Mis viajes» (js/perfil.js) ────────────────────────
+// El perfil local guarda el pinHash CIFRADO con su propia contraseña; al entrar
+// desde la lista de viajes hay que inyectar aquí ese secreto efímero (solo en
+// memoria) para que beginSession() vuelva a cifrar la credencial en el almacén
+// v3 legacy sin pedir un PIN nuevo. setSessionSecret(null) lo descarta.
+function setSessionSecret(b64url) { sessionSecretB64 = b64url || null; }
+
 // ¿Otra pestaña cerró nuestra sesión mientras esta seguía abierta?
 // Se alimenta del evento 'storage' (dispara SOLO en las otras pestañas).
 let _revokedElsewhere = false;

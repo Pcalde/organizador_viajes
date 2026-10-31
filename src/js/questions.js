@@ -219,19 +219,37 @@ function buildQuestionCard(q, idx) {
     }
   });
 
-  // Panel de confirmación inline para eliminar la pregunta completa (sin window.confirm)
+  // Panel de confirmación inline para eliminar la pregunta completa (sin window.confirm).
+  // Texto correcto según el tipo de tarjeta: una marca de sección NO es una
+  // «pregunta»: al borrarla se ofrece el flujo completo de eliminar-sección
+  // (las preguntas agrupadas pasan a «Sin sección», no se borran).
   const delBox = div('q-edit-inline');
   delBox.style.display = 'none';
   delBox.style.borderColor = 'var(--accent)';
-  delBox.innerHTML = `
-    <div class="inline-confirm-bar" style="width:100%">
-      <span>¿Seguro que quieres eliminar la sección <b>«${esc(q.label)}»</b> para todo el grupo?</span>
-      <div style="display:flex;gap:6px">
-        <button type="button" class="btn-pc btn-qdel-cancel">Cancelar</button>
-        <button type="button" class="btn-pc btn-pc-contra btn-qdel-confirm">Sí, eliminar pregunta</button>
-      </div>
-    </div>
-  `;
+  const esMarca = secIsHeaderCard(q);
+  const nMiembros = esMarca ? schema.filter(x =>
+      x.config && !x.config.esEncabezado &&
+      String(x.config.seccion || '').trim().toLowerCase() ===
+      String(q.config.seccion || q.label).trim().toLowerCase()).length : 0;
+  delBox.innerHTML = esMarca
+    ? `<div class="inline-confirm-bar" style="width:100%;flex-direction:column;align-items:flex-start;gap:8px">
+        <span>Esta tarjeta es la <b>marca de la sección «${esc(q.label)}»</b>, no una pregunta.</span>
+        <span style="color:var(--muted);font-size:0.82rem">${nMiembros
+          ? `Al eliminar la sección, sus <b>${nMiembros}</b> pregunta${nMiembros === 1 ? '' : 's'} pasarán a «Sin sección» (no se borran).`
+          : 'La sección está vacía: solo desaparecerá su marca del raíl.'}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="btn-pc btn-qdel-cancel">Cancelar</button>
+          <button type="button" class="btn-pc btn-qdel-marca">Sí, borrar solo la marca</button>
+          <button type="button" class="btn-pc btn-pc-contra btn-qdel-seccion">Eliminar sección completa</button>
+        </div>
+      </div>`
+    : `<div class="inline-confirm-bar" style="width:100%">
+        <span>¿Seguro que quieres eliminar la pregunta <b>«${esc(q.label)}»</b> para todo el grupo?</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn-pc btn-qdel-cancel">Cancelar</button>
+          <button type="button" class="btn-pc btn-pc-contra btn-qdel-confirm">Sí, eliminar pregunta</button>
+        </div>
+      </div>`;
   card.appendChild(delBox);
 
   btnDel.addEventListener('click', () => {
@@ -241,34 +259,69 @@ function buildQuestionCard(q, idx) {
   delBox.querySelector('.btn-qdel-cancel').addEventListener('click', () => {
     delBox.style.display = 'none';
   });
-  delBox.querySelector('.btn-qdel-confirm').addEventListener('click', async () => {
-    if (!user) return;
-    const cBtn = delBox.querySelector('.btn-qdel-confirm');
-    cBtn.disabled = true;
-    cBtn.textContent = 'Eliminando…';
-    try {
-      await apiAuth({
-        action: 'delete_pregunta',
-        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
-        questionId: q.id,
-      });
-      schema = schema.filter(x => x.id !== q.id);
-      card.remove();
-      const domOrder = [...container.querySelectorAll(':scope > .card')].map(c => c.dataset.qid).join();
-      if (domOrder !== schema.map(q => q.id).join()) {
-        schema.forEach(q => { const c = cardFor(q.id); if (c) container.appendChild(c); });
+
+  if (esMarca) {
+    // Borrar solo la marca: la agrupación por config.seccion sigue viva si
+    // hay preguntas con ese nombre; si no, la sección desaparece del raíl.
+    delBox.querySelector('.btn-qdel-marca').addEventListener('click', async () => {
+      if (!user) return;
+      const b = delBox.querySelector('.btn-qdel-marca');
+      b.disabled = true; b.textContent = 'Borrando…';
+      try {
+        await apiAuth({
+          action: 'delete_pregunta',
+          eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+          questionId: q.id,
+        });
+        schema = schema.filter(x => x.id !== q.id);
+        card.remove();
+        showStatus('Marca de sección eliminada (las preguntas se conservan).', 'ok', 4000);
+        if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
+        pollOnce();
+      } catch (e) {
+        b.disabled = false; b.textContent = 'Sí, borrar solo la marca';
+        showStatus('No se pudo borrar la marca: ' + e.message, 'err');
       }
-      renumberCards();
-      // Si la pregunta eliminada era fuente de alguna condición, se limpia en
-      // syncCondicionesTrasCambioEsquema() (vía pollOnce → polling.js).
-      showStatus('Pregunta eliminada', 'ok', 2500);
-      pollOnce();
-    } catch (e) {
-      cBtn.disabled = false;
-      cBtn.textContent = 'Sí, eliminar pregunta';
-      showStatus('No se pudo eliminar la pregunta: ' + e.message, 'err');
-    }
-  });
+    });
+    // Flujo completo de borrar-sección (secciones.js): pasa las preguntas a
+    // «Sin sección» con aviso claro y elimina la/s marca/s.
+    delBox.querySelector('.btn-qdel-seccion').addEventListener('click', async () => {
+      if (!user) return;
+      const b = delBox.querySelector('.btn-qdel-seccion');
+      b.disabled = true; b.textContent = 'Eliminando…';
+      await eliminarSeccion(q.config.seccion || q.label);
+    });
+  } else {
+    delBox.querySelector('.btn-qdel-confirm').addEventListener('click', async () => {
+      if (!user) return;
+      const cBtn = delBox.querySelector('.btn-qdel-confirm');
+      cBtn.disabled = true;
+      cBtn.textContent = 'Eliminando…';
+      try {
+        await apiAuth({
+          action: 'delete_pregunta',
+          eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+          questionId: q.id,
+        });
+        schema = schema.filter(x => x.id !== q.id);
+        card.remove();
+        const domOrder = [...container.querySelectorAll(':scope > .card')].map(c => c.dataset.qid).join();
+        if (domOrder !== schema.map(q => q.id).join()) {
+          schema.forEach(q => { const c = cardFor(q.id); if (c) container.appendChild(c); });
+        }
+        renumberCards();
+        // Si la pregunta eliminada era fuente de alguna condición, se limpia en
+        // syncCondicionesTrasCambioEsquema() (vía pollOnce → polling.js).
+        showStatus('Pregunta eliminada', 'ok', 2500);
+        if (typeof refreshSecciones === 'function') setTimeout(refreshSecciones, 0);
+        pollOnce();
+      } catch (e) {
+        cBtn.disabled = false;
+        cBtn.textContent = 'Sí, eliminar pregunta';
+        showStatus('No se pudo eliminar la pregunta: ' + e.message, 'err');
+      }
+    });
+  }
 
   type.build(card, q);
   return card;
