@@ -368,7 +368,7 @@ function secHeaderPara(nombre) {
 }
 
 // Índice de la primera pregunta visible de una sección (acepta objeto o nombre).
-// Envuelve _secPrimeraVisible para uso desde forms.js (lista de gestión 🗂).
+// Envuelve _secPrimeraVisible para uso desde forms.js (lista de gestión).
 function secPrimeraVisibleDe(secOrNombre, answers) {
   const st = answers || readState().answers;
   let sec = secOrNombre;
@@ -567,16 +567,19 @@ function _secHasAnswer(raw, tipo) {
 
 // ── Raíl de secciones ───────────────────────────────────────────────────────
 // El raíl pinta SECCIONES (agrupaciones de config.seccion), no preguntas:
-// cada entrada muestra el título de la sección, su estado global (✓ si todas
-// sus preguntas visibles están respondidas, ⌀ si ninguna aplica, ●/○ en otro
-// caso) y una sublista con las preguntas que contiene. Al pie: «+ Nueva
+// cada entrada muestra el título de la sección, su estado global (check si
+// todas sus preguntas visibles están respondidas, prohibido si ninguna
+// aplica, relleno/vacío en otro caso) y una sublista con las preguntas. Al pie: «+ Nueva
 // sección» y el ajuste «lo que responde el grupo».
 function renderRail() {
   const rail = $('sec-rail');
   if (!rail) return;
-  rail.innerHTML = '';
+  // Vaciar SOLO los hijos generados por el raíl: un innerHTML = '' borraría
+  // también las etiquetas <script> que viven al final del body (el raíl es
+  // contenedor directo de index.html), rompiendo toda la app.
+  [...rail.children].forEach(c => { if (!c.matches('script')) c.remove(); });
   if (!schema.length) {
-    rail.innerHTML = '<div class="sec-rail-empty">Sin secciones todavía</div>';
+    rail.appendChild(div('sec-rail-empty', 'Sin secciones todavía'));
     rail.appendChild(secAddSectionButton());
     rail.appendChild(secGroupInfoRow());
     return;
@@ -595,9 +598,13 @@ function renderRail() {
     const b = document.createElement('div');
     b.className = 'sec-rail-item' + (active ? ' active' : '') + (allHidden ? ' not-applicable' : '');
     b.setAttribute('role', 'listitem');
-    const statusIcon = allHidden ? '⌀' : answered ? '✓' : active ? '●' : '○';
+    // Iconos de estado en Font Awesome (antes ⌀/✓/●/○ como texto suelto).
+    const statusIcon = allHidden ? '<i class="fa-solid fa-ban" aria-hidden="true"></i>'
+      : answered ? '<i class="fa-solid fa-check" aria-hidden="true"></i>'
+      : active ? '<i class="fa-solid fa-circle-dot" aria-hidden="true"></i>'
+      : '<i class="fa-regular fa-circle" aria-hidden="true"></i>';
     const num = String(shownNum || 1).padStart(2, '0');
-    // Ficha del raíl: zona navegable (botón) + botón 🗂 (gestionar sección),
+    // Ficha del raíl: zona navegable (botón) + botón de gestionar sección,
     // que abre un menú inline con Renombrar / Eliminar sección / Añadir pregunta.
     const main = document.createElement('button');
     main.type = 'button';
@@ -614,11 +621,11 @@ function renderRail() {
     });
     b.appendChild(main);
 
-    // Botón 🗂 «editar sección» (menú inline bajo la ficha).
+    // Botón «gestionar sección» (menú inline bajo la ficha).
     const tool = document.createElement('button');
     tool.type = 'button';
     tool.className = 'sec-rail-tool sec-rail-manage';
-    tool.textContent = '🗂';
+    tool.innerHTML = '<i class="fa-solid fa-folder-open" aria-hidden="true"></i>';
     tool.title = 'Gestionar sección «' + sec.titulo + '»';
     tool.setAttribute('aria-label', 'Gestionar sección ' + sec.titulo);
     tool.addEventListener('click', e => {
@@ -634,7 +641,12 @@ function renderRail() {
         const s = document.createElement('button');
         s.type = 'button';
         s.className = 'sec-rail-subitem' + (it.i === SEC_ESTADO.idx ? ' current' : '');
-        const dot = _secHasAnswer(st[it.q.id], it.q.tipo) ? '✓' : it.i === SEC_ESTADO.idx ? '●' : '·';
+        // Punto de estado en Font Awesome (respondida / actual / pendiente).
+        const dot = _secHasAnswer(st[it.q.id], it.q.tipo)
+          ? '<i class="fa-solid fa-check" aria-hidden="true"></i>'
+          : it.i === SEC_ESTADO.idx
+            ? '<i class="fa-solid fa-circle-dot" aria-hidden="true"></i>'
+            : '<i class="fa-regular fa-circle" aria-hidden="true"></i>';
         s.innerHTML = `<span class="sub-dot">${dot}</span><span class="sub-txt">${esc(it.q.label)}</span>`;
         s.title = it.q.label;
         s.addEventListener('click', e => { e.stopPropagation(); goToSection(it.i); });
@@ -649,7 +661,7 @@ function renderRail() {
   rail.appendChild(secGroupInfoRow());
 }
 
-// ── Menú inline 🗂 «gestionar sección» (ficha del raíl) ─────────────────────
+// ── Menú inline «gestionar sección» (ficha del raíl) ────────────────────────
 // Acciones: Renombrar · Eliminar sección · Añadir pregunta aquí.
 let _secManageOpen = null;   // { host, panel } del menú abierto (solo uno a la vez)
 
@@ -675,9 +687,9 @@ function toggleSecManageMenu(host, sec) {
     panel.appendChild(it);
     return it;
   };
-  mk('✏️ Renombrar sección', '', (it, p) => _secAbrirRenombrar(host, sec, it, p));
-  mk('➕ Añadir pregunta aquí', '', () => { _secCerrarMenu(); abrirAddPreguntaEnSeccion(sec.nombre || ''); });
-  mk('🗑 Eliminar sección', 'danger', (it, p) => _secAbrirEliminar(host, sec, it, p));
+  mk('<i class="fa-solid fa-pen" aria-hidden="true"></i> Renombrar sección', '', (it, p) => _secAbrirRenombrar(host, sec, it, p));
+  mk('<i class="fa-solid fa-plus" aria-hidden="true"></i> Añadir pregunta aquí', '', () => { _secCerrarMenu(); abrirAddPreguntaEnSeccion(sec.nombre || ''); });
+  mk('<i class="fa-solid fa-trash" aria-hidden="true"></i> Eliminar sección', 'danger', (it, p) => _secAbrirEliminar(host, sec, it, p));
   host.appendChild(panel);
   _secManageOpen = { host, panel };
 }
@@ -865,7 +877,7 @@ async function eliminarSeccion(nombre) {
 }
 
 // Abre #add-q-form (tarjeta «Ampliar el cuestionario») con la sección ya
-// seleccionada en el desplegable. Llamado desde el menú 🗂 y la lista de gestión.
+// seleccionada en el desplegable. Llamado desde el menú de gestionar y la lista.
 function abrirAddPreguntaEnSeccion(nombre) {
   const f = $('add-q-form'), t = $('btn-toggle-add-q');
   if (t && !f.classList.contains('open')) t.click();  // rebind de secciones/condición
@@ -888,7 +900,7 @@ function secAddSectionButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'sec-rail-add';
-  btn.textContent = '+ Nueva sección';
+  btn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i> Nueva sección';
   btn.addEventListener('click', () => {
     btn.style.display = 'none';
     const form = div('sec-rail-add-form');
@@ -957,7 +969,7 @@ async function crearSeccion(nombre) {
     if (typeof goToSectionDeNombre === 'function') goToSectionDeNombre(nombre);
     else refreshSecciones();
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 40);
-    showStatus(`Sección «${nombre}» creada. Añade preguntas y asígnalas desde ✎.`, 'ok', 6000);
+    showStatus(`Sección «${nombre}» creada. Añade preguntas y asígnalas desde el botón Editar de cada ficha.`, 'ok', 6000);
   } catch (e) {
     if (card) card.remove();
     const i = schema.indexOf(pregunta);
@@ -1125,8 +1137,8 @@ window.onSecChange = refreshSecciones;
 
 // ── Lista de gestión de secciones (#sec-manage-list, tarjeta «Secciones del
 //    cuestionario» en forms.js/index.html) ───────────────────────────────────
-// Render de todas las secciones con sus acciones (✏️ renombrar · 🗑 eliminar ·
-// ➕ añadir pregunta aquí). Se repinta desde refreshSecciones().
+// Render de todas las secciones con sus acciones (renombrar · eliminar ·
+// añadir pregunta aquí). Se repinta desde refreshSecciones().
 function renderSecManageList() {
   const host = $('sec-manage-list');
   if (!host) return;
@@ -1161,16 +1173,16 @@ function renderSecManageList() {
       tools.appendChild(b);
       return b;
     };
-    mk('✏️', 'Renombrar sección «' + sec.titulo + '»', '', (b, row) => secManageAbrirRename(row, sec));
-    mk('➕', 'Añadir pregunta en «' + sec.titulo + '»', '', () => abrirAddPreguntaEnSeccion(nom));
-    mk('🗑', 'Eliminar sección «' + sec.titulo + '»', 'sec-rail-delete', (b, row) => secManageAbrirDelete(row, sec));
+    mk('<i class="fa-solid fa-pen" aria-hidden="true"></i>', 'Renombrar sección «' + sec.titulo + '»', '', (b, row) => secManageAbrirRename(row, sec));
+    mk('<i class="fa-solid fa-plus" aria-hidden="true"></i>', 'Añadir pregunta en «' + sec.titulo + '»', '', () => abrirAddPreguntaEnSeccion(nom));
+    mk('<i class="fa-solid fa-trash" aria-hidden="true"></i>', 'Eliminar sección «' + sec.titulo + '»', 'sec-rail-delete', (b, row) => secManageAbrirDelete(row, sec));
 
     row.append(meta, tools);
     host.appendChild(row);
   });
 }
 
-// Renombrar inline desde la lista de gestión (mismo flujo que el menú 🗂).
+// Renombrar inline desde la lista de gestión (mismo flujo que el menú de gestionar).
 function secManageAbrirRename(row, sec) {
   let form = row.querySelector('.sec-rail-rename-form');
   if (form) { form.remove(); return; }         // toggle

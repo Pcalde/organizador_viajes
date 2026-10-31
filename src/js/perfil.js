@@ -203,13 +203,13 @@ function renderTripsList() {
 
     const btnEntrar = document.createElement('button');
     btnEntrar.type = 'button'; btnEntrar.className = 'btn-propose trips-btn-entrar';
-    btnEntrar.textContent = 'Entrar →';
+    btnEntrar.innerHTML = 'Entrar <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>';
     btnEntrar.addEventListener('click', async () => {
       if (!_perfil.clave) { tripsErr('Introduce primero tu contraseña del perfil.'); return; }
       btnEntrar.disabled = true; btnEntrar.textContent = 'Comprobando…';
       const pinHash = await getCredViaje(eid);
       if (!pinHash) {
-        btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar →';
+        btnEntrar.disabled = false; btnEntrar.innerHTML = 'Entrar <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>';
         tripsErr('No se pudo descifrar la credencial: vuelve a introducir la contraseña del perfil.');
         return;
       }
@@ -226,11 +226,11 @@ function renderTripsList() {
         enterSurvey();
       } catch (e) {
         setSessionSecret(null);
-        btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar →';
+        btnEntrar.disabled = false; btnEntrar.innerHTML = 'Entrar <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>';
         const muerto = /no existe|not found|404|registrado/i.test(String(e.message || ''));
         if (muerto) {
           row.classList.add('trips-dead');
-          tripsErr(`El viaje «${eid}» ya no existe en el servidor. Puedes quitarlo de la lista (🗑).`);
+          tripsErr(`El viaje «${eid}» ya no existe en el servidor. Puedes quitarlo de la lista con el icono de papelera.`);
         } else {
           // PIN cambiado u otra causa: se abre el login con el eid relleno.
           abrirLoginParaViaje(eid, viajes[eid].alias || '');
@@ -242,7 +242,7 @@ function renderTripsList() {
     const btnCopy = document.createElement('button');
     btnCopy.type = 'button'; btnCopy.className = 'btn-propose trips-btn-copy';
     btnCopy.title = 'Copiar enlace de invitación de «' + (viajes[eid].alias || eid) + '»';
-    btnCopy.textContent = '🔗 Copiar enlace';
+    btnCopy.innerHTML = '<i class="fa-solid fa-link" aria-hidden="true"></i> Copiar enlace';
     btnCopy.addEventListener('click', async () => {
       const url = location.origin + location.pathname + '?e=' + encodeURIComponent(eid);
       let ok = false;
@@ -257,15 +257,15 @@ function renderTripsList() {
           ta.remove();
         } catch (e2) { ok = false; }
       }
-      btnCopy.textContent = ok ? '✓ ¡Copiado!' : '⚠ ' + url;
-      setTimeout(() => { btnCopy.textContent = '🔗 Copiar enlace'; }, 2500);
+      btnCopy.innerHTML = ok ? '<i class="fa-solid fa-check" aria-hidden="true"></i> ¡Copiado!' : '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ' + esc(url);
+      setTimeout(() => { btnCopy.innerHTML = '<i class="fa-solid fa-link" aria-hidden="true"></i> Copiar enlace'; }, 2500);
     });
     tools.appendChild(btnCopy);
 
     const btnDel = document.createElement('button');
     btnDel.type = 'button'; btnDel.className = 'sec-rail-tool sec-rail-delete';
     btnDel.title = 'Quitar «' + (viajes[eid].alias || eid) + '» de la lista (no borra el viaje del servidor)';
-    btnDel.textContent = '🗑';
+    btnDel.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
     btnDel.addEventListener('click', () => {
       const p = _loadProfileStore();
       if (!p) return;
@@ -340,7 +340,7 @@ function salirDelPerfil() {
   if (btn) { btn.textContent = 'Entrar →'; btn.disabled = false; }
 }
 
-// «Logout suave» (botón ⌂): cierra la encuesta pero CONSERVA el perfil local.
+// «Logout suave» (botón de inicio): cierra la encuesta pero CONSERVA el perfil.
 function volverATrips() {
   stopPolling();
   clearTimeout(saveTimer);
@@ -368,12 +368,24 @@ function initPerfil() {
     hideTripsScreen();
     const ls = $('login-screen');
     if (ls) ls.style.display = 'flex';
-    // El acceso directo del login es solo «Entrar»: la creación de viaje se
-    // hace desde «Mis viajes» (main.js → setLoginMode). Aun así, si alguien
-    // llega al login por otro camino, el plegable «+ Crear» sigue disponible.
+    // Crear viaje usa el flujo legacy completo (#btn-create-trip en main.js):
+    // título, plantilla y contraseña de perfil. Si el perfil ya existe pero
+    // está bloqueado, se pide antes su contraseña para poder cifrar el acceso.
     if (typeof setLoginMode === 'function') setLoginMode(true);
     const inp = $('login-nombre');
     if (inp && !inp.value) inp.value = _perfil.nombre || '';
+    if (_perfil.activo && !_perfil.clave) {
+      const chk = $('trips-check-card'), main = $('trips-main-card');
+      if (chk) chk.style.display = '';
+      if (main) main.style.display = 'none';
+      if (ls) ls.style.display = 'none';
+      const scr = $('trips-screen');
+      if (scr) scr.style.display = 'flex';
+      tripsErr('Introduce tu contraseña del perfil para crear un viaje nuevo.');
+      const pass = $('trips-pass');
+      if (pass) setTimeout(() => pass.focus(), 60);
+      return;
+    }
     const np = $('login-perfil-pass-nueva');
     if (np) setTimeout(() => np.focus(), 60);
   });

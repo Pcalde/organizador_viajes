@@ -129,7 +129,7 @@ function bindCreateTripUI() {
   const btnCreate = $('btn-create-trip');
   if (!tabJoin || !tabCreate) return;
 
-  const setLoginMode = isCreate => {
+  const setLoginMode = window.setLoginMode = isCreate => {
     tabJoin.classList.toggle('active', !isCreate);
     tabCreate.classList.toggle('active', isCreate);
     if (extraBox)  extraBox.style.display  = isCreate ? 'flex'  : 'none';
@@ -167,6 +167,16 @@ function bindCreateTripUI() {
         user = { nombre: res.nombre, pinHash, eid };
         const recordar = $('login-recordar') ? $('login-recordar').checked : true;
         await beginSession(res.nombre, eid, pinHash, { persist: recordar });
+        // Perfil local: crear viaje fija también la contraseña del perfil
+        // (primer viaje) o verifica la existente antes de guardar el acceso.
+        if (typeof registrarViaje === 'function') {
+          const passPerfil = ($('login-perfil-pass-nueva')?.value || '').trim();
+          try {
+            await registrarViaje(eid, passPerfil, titulo);
+          } catch (eReg) { console.warn('Perfil:', eReg); showLoginErr(eReg.message); return; }
+          const npEl = $('login-perfil-pass-nueva');
+          if (npEl) npEl.value = '';
+        }
         $('login-pin').value = '';
 
         applyData(res.datos);
@@ -202,6 +212,17 @@ function bindNavigation() {
   if (tog) tog.addEventListener('click', toggleSideNav);
   const bd = $('side-nav-backdrop');
   if (bd) bd.addEventListener('click', closeSideNav);
+
+  // Botón de inicio de la barra superior: vuelve a «Mis viajes» conservando
+  // el perfil (logout suave). Solo tiene sentido si existe perfil local.
+  const btnTrips = $('btn-back-trips');
+  if (btnTrips) {
+    btnTrips.style.display =
+      (typeof hayPerfilLocal === 'function' && hayPerfilLocal()) ? '' : 'none';
+    btnTrips.addEventListener('click', () => {
+      if (typeof volverATrips === 'function') volverATrips(); else logout();
+    });
+  }
   if (typeof bindMapModal === 'function') bindMapModal();
   if (typeof bindAccountModal === 'function') bindAccountModal();
 
@@ -234,5 +255,21 @@ document.addEventListener('DOMContentLoaded', () => {
     showLoginErr('Falta configurar js/config.js (SUPABASE_URL y SUPABASE_KEY).');
     return;
   }
-  tryRestoreSession();
+  // Enlace de invitación (?e=…) al crear viaje: pre-rellena el ID destino.
+  const deLink = eidDeLaUrl();
+  if (deLink) { const te = $('login-eid'); if (te) te.value = deLink; }
+
+  // Orden de pantallas: si hay perfil local Y no hay sesión guardada ni
+  // enlace directo, se arranca en «Mis viajes». El flujo legacy (restaurar
+  // sesión o entrar por ?e=) queda intacto: viaja directo al cuestionario.
+  if (typeof initPerfil === 'function') initPerfil();
+  const haySesion   = typeof getSavedSessionRaw === 'function' && !!getSavedSessionRaw();
+  const mostrarTrips = typeof hayPerfilLocal === 'function' && hayPerfilLocal() && !haySesion && !deLink;
+  if (mostrarTrips) {
+    const ls = $('login-screen');
+    if (ls) ls.style.display = 'none';
+    showTripsScreen();
+  } else {
+    tryRestoreSession();
+  }
 });

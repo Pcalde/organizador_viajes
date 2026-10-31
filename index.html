@@ -49,14 +49,14 @@
       <div id="trips-list" class="trips-list"></div>
 
       <div class="trips-actions">
-        <button type="button" class="btn-generate" id="btn-trips-create">+ Crear viaje nuevo →</button>
+        <button type="button" class="btn-generate" id="btn-trips-create"><i class="fa-solid fa-plus" aria-hidden="true"></i> Crear viaje nuevo <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
       </div>
 
       <details class="trips-join-box">
         <summary>Unirme con un enlace de invitación o código</summary>
         <div class="trips-join-fields">
           <input type="text" id="trips-eid-input" placeholder="código o enlace (p. ej. pirineos-2026 o https://…/?e=pirineos-2026)" autocomplete="off">
-          <button type="button" class="btn-propose" id="btn-trips-unir">Unirme →</button>
+          <button type="button" class="btn-propose" id="btn-trips-unir">Unirme <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
         </div>
       </details>
 
@@ -138,8 +138,8 @@
       <span id="utag-nombre">-</span>
       <span class="eid" id="utag-eid"></span>
       <span class="poll-dot" id="poll-dot" title="Sincronización activa"></span>
-      <button class="btn-logout" id="btn-back-trips" title="Volver a Mis viajes">⌂</button>
-      <button class="btn-logout" id="btn-logout" title="Cerrar sesión">✕</button>
+      <button class="btn-logout" id="btn-back-trips" title="Volver a Mis viajes"><i class="fa-solid fa-house" aria-hidden="true"></i></button>
+      <button class="btn-logout" id="btn-logout" title="Cerrar sesión"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
     </div>
   </header>
 
@@ -297,9 +297,9 @@
       <!-- PROPONER NUEVA SECCIÓN: crea la sección con su marca en el raíl y,
            opcionalmente, una primera pregunta dentro de ella. -->
       <div class="card" id="add-section-card">
-        <div class="card-title"><span class="num">▤</span> Secciones del cuestionario</div>
-        <p class="participants-note" style="margin-bottom:12px">Agrupa las preguntas por secciones. Puedes renombrar o eliminar cualquier sección desde el lápiz 🗂 de su ficha en el raíl; las preguntas que contenida pasan a «Sin sección».</p>
-        <button class="add-opt-trigger" id="btn-toggle-add-sec" type="button">+ Crear una nueva sección</button>
+        <div class="card-title"><span class="num"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span> Secciones del cuestionario</div>
+        <p class="participants-note" style="margin-bottom:12px">Agrupa las preguntas por secciones. Puedes renombrar o eliminar cualquier sección desde el botón de gestionar de su ficha en el raíl; las preguntas que contenía pasan a «Sin sección».</p>
+        <button class="add-opt-trigger" id="btn-toggle-add-sec" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Crear una nueva sección</button>
         <div class="add-q-form" id="add-sec-form">
           <div class="add-q-field">
             <label>Nombre de la sección</label>
@@ -332,7 +332,7 @@
               <button class="btn-add-q-opt" type="button" id="btn-add-sec-q-opt">+ Opción</button>
             </div>
           </details>
-          <button class="btn-propose" type="button" id="btn-submit-new-sec">Crear sección →</button>
+          <button class="btn-propose" type="button" id="btn-submit-new-sec">Crear sección <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
         </div>
         <div class="sec-manage-list" id="sec-manage-list"></div>
       </div>
@@ -370,8 +370,8 @@
           <span class="sec-btn-txt">Siguiente</span> <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
         </button>
         <span class="sec-nav-sep"></span>
-        <button class="btn-generate sec-submit" id="sec-submit" type="button">Actualizar respuesta →</button>
-        <button class="btn-generate sec-engine" id="btn-generate" type="button" hidden aria-hidden="true">Actualizar respuesta →</button>
+        <button class="btn-generate sec-submit" id="sec-submit" type="button">Actualizar respuesta <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+        <button class="btn-generate sec-engine" id="btn-generate" type="button" hidden aria-hidden="true">Actualizar respuesta</button>
       </div>
     </div>
 

@@ -2,9 +2,10 @@
    REGISTRO DE TIPOS DE PREGUNTA (Generalizado + Edición/Borrado de Opciones)
    ══════════════════════════════════════════════════════════════════════════ */
 
-function div(cls) {
+function div(cls, txt) {
   const d = document.createElement('div');
   if (cls) d.className = cls;
+  if (txt != null) d.textContent = txt;
   return d;
 }
 

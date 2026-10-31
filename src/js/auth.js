@@ -45,6 +45,18 @@ async function handleLogin() {
     // La credencial persiste SOLO cifrada con un secreto aleatorio de sesión
     // (nunca en claro). Con "recordar" desmarcado no se escribe nada en disco.
     await beginSession(res.nombre, eid, pinHash, { persist: recordar });
+    // Guardar el acceso en «Mis viajes» (perfil local) si el usuario escribió
+    // su contraseña local o ya tenía el perfil desbloqueado en esta sesión.
+    if (typeof registrarViaje === 'function') {
+      const passLocal = ($('login-perfil-pass')?.value || '').trim();
+      try {
+        if (passLocal || perfilEstaActivo()) {
+          await registrarViaje(eid, passLocal, res.titulo || '');
+        }
+      } catch (eReg) { console.warn('Perfil:', eReg); showLoginErr(eReg.message); }
+      const pwEl = $('login-perfil-pass');
+      if (pwEl) pwEl.value = '';
+    }
     lastRaw = JSON.stringify(res.datos);
     applyData(res.datos);
     enterSurvey();
@@ -92,6 +104,12 @@ function tryRestoreSession() {
 }
 
 function enterSurvey() {
+  // El campo «Guardar en Mis viajes» se muestra en el login cuando puede
+  // servir de algo: sin perfil todavía, o con el perfil ya desbloqueado.
+  const pwWrap = $('login-perfil-wrap');
+  if (pwWrap && typeof hayPerfilLocal === 'function') {
+    pwWrap.style.display = (hayPerfilLocal() && !perfilEstaActivo()) ? 'none' : 'block';
+  }
   $('login-screen').style.display  = 'none';
   $('survey-screen').style.display = 'block';
   $('utag-nombre').textContent = user.nombre;

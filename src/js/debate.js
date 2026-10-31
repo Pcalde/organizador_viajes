@@ -91,7 +91,7 @@ function renderDebate() {
 
   threadsCard.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-      <div class="card-title" style="margin-bottom:0"><span class="num">🗂️</span> Hilos y Argumentos por Sección</div>
+      <div class="card-title" style="margin-bottom:0"><span class="num"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span> Hilos y Argumentos por Sección</div>
       <div style="display:flex;gap:6px;align-items:center">
         <select id="sel-debate-filter-q" style="width:auto;padding:6px 10px;font-size:0.82rem">
           <option value="">Todas las preguntas</option>
