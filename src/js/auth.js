@@ -17,17 +17,14 @@ function eidDeLaUrl() {
 }
 
 async function handleLogin() {
-  const nombre = $('login-nombre').value.trim();
-  const pin    = $('login-pin').value.trim();
+  const nombre = $('login-nombre').value.trim()
   const eid    = normEid($('login-eid').value.trim());
   const btn    = $('btn-login');
   const recordar = $('login-recordar') ? $('login-recordar').checked : true;
 
   $('login-error').style.display = 'none';
   if (!nombre)        { showLoginErr('Escribe tu nombre'); return; }
-  // El PIN admite dígitos y letras (mín. 4); la fuerza bruta se frena en el
   // servidor (límite de intentos + bcrypt), no con reglas client-side.
-  if (pin.length < 4) { showLoginErr('El PIN debe tener al menos 4 caracteres'); return; }
   if (!eid)           { showLoginErr('Introduce el ID de la encuesta'); return; }
 
   btn.textContent = 'Cargando…'; btn.disabled = true;
