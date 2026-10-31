@@ -367,6 +367,18 @@ function secHeaderPara(nombre) {
     _secNormNombre(q.config.seccion || q.label) === key) || null;
 }
 
+// Índice de la primera pregunta visible de una sección (acepta objeto o nombre).
+// Envuelve _secPrimeraVisible para uso desde forms.js (lista de gestión 🗂).
+function secPrimeraVisibleDe(secOrNombre, answers) {
+  const st = answers || readState().answers;
+  let sec = secOrNombre;
+  if (typeof sec === 'string') {
+    const key = _secNormNombre(sec);
+    sec = seccionesDelEsquema().find(s => _secNormNombre(s.nombre) === key);
+  }
+  return sec ? _secPrimeraVisible(sec, st) : -1;
+}
+
 // Inserta `card` en el contenedor justo después de la tarjeta de `beforeQ`
 // (o al principio si no hay referencia). Mantiene DOM y esquema alineados:
 // polling/syncSchemaToDOM solo añaden/quitan tarjetas, nunca las reubican,
@@ -500,6 +512,7 @@ function refreshSecciones() {
   if (activeMode !== 'survey') return;
   applySectionPaging();
   decorateSectionStats();
+  if (typeof renderSecManageList === 'function') renderSecManageList();
 }
 
 // Cambios de esquema desde el servidor que afectan a las condiciones:
@@ -579,22 +592,40 @@ function renderRail() {
     const active = cur === sec;
     if (!allHidden) shownNum++;
 
-    const b = document.createElement('button');
-    b.type = 'button';
+    const b = document.createElement('div');
     b.className = 'sec-rail-item' + (active ? ' active' : '') + (allHidden ? ' not-applicable' : '');
-    b.setAttribute('aria-current', active ? 'step' : 'false');
+    b.setAttribute('role', 'listitem');
     const statusIcon = allHidden ? '⌀' : answered ? '✓' : active ? '●' : '○';
     const num = String(shownNum || 1).padStart(2, '0');
-    b.innerHTML =
+    // Ficha del raíl: zona navegable (botón) + botón 🗂 (gestionar sección),
+    // que abre un menú inline con Renombrar / Eliminar sección / Añadir pregunta.
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'sec-rail-main';
+    main.innerHTML =
       `<span class="sec-rail-status" aria-hidden="true">${statusIcon}</span>` +
       `<span class="sec-rail-num">${num}</span>` +
       `<span class="sec-rail-label">${esc(sec.titulo)}</span>` +
       (allHidden ? '<span class="sec-rail-na">no aplica</span>' : '');
-    b.title = allHidden ? sec.titulo + ' — no aplica con las respuestas actuales' : sec.titulo;
-    b.addEventListener('click', () => {
+    main.title = allHidden ? sec.titulo + ' — no aplica con las respuestas actuales' : sec.titulo;
+    main.addEventListener('click', () => {
       const idx = _secPrimeraVisible(sec, st);
       if (idx >= 0) goToSection(idx);
     });
+    b.appendChild(main);
+
+    // Botón 🗂 «editar sección» (menú inline bajo la ficha).
+    const tool = document.createElement('button');
+    tool.type = 'button';
+    tool.className = 'sec-rail-tool sec-rail-manage';
+    tool.textContent = '🗂';
+    tool.title = 'Gestionar sección «' + sec.titulo + '»';
+    tool.setAttribute('aria-label', 'Gestionar sección ' + sec.titulo);
+    tool.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleSecManageMenu(b, sec);
+    });
+    b.appendChild(tool);
 
     // Sublista de preguntas de la sección (navegación fina dentro de ella).
     if (items.length) {
@@ -616,6 +647,238 @@ function renderRail() {
 
   rail.appendChild(secAddSectionButton());
   rail.appendChild(secGroupInfoRow());
+}
+
+// ── Menú inline 🗂 «gestionar sección» (ficha del raíl) ─────────────────────
+// Acciones: Renombrar · Eliminar sección · Añadir pregunta aquí.
+let _secManageOpen = null;   // { host, panel } del menú abierto (solo uno a la vez)
+
+function _secCerrarMenu() {
+  if (_secManageOpen) {
+    _secManageOpen.panel.remove();
+    _secManageOpen = null;
+  }
+}
+
+function toggleSecManageMenu(host, sec) {
+  const yaAbierto = _secManageOpen && _secManageOpen.host === host;
+  _secCerrarMenu();
+  if (yaAbierto) return;
+  const panel = div('sec-rail-menu');
+  panel.setAttribute('role', 'menu');
+  const mk = (label, cls, fn) => {
+    const it = document.createElement('button');
+    it.type = 'button';
+    it.className = 'sec-rail-menu-item' + (cls ? ' ' + cls : '');
+    it.textContent = label;
+    it.addEventListener('click', e => { e.stopPropagation(); fn(it, panel); });
+    panel.appendChild(it);
+    return it;
+  };
+  mk('✏️ Renombrar sección', '', (it, p) => _secAbrirRenombrar(host, sec, it, p));
+  mk('➕ Añadir pregunta aquí', '', () => { _secCerrarMenu(); abrirAddPreguntaEnSeccion(sec.nombre || ''); });
+  mk('🗑 Eliminar sección', 'danger', (it, p) => _secAbrirEliminar(host, sec, it, p));
+  host.appendChild(panel);
+  _secManageOpen = { host, panel };
+}
+
+// Cerrar el menú al hacer clic fuera de él o pulsar Escape.
+document.addEventListener('click', e => {
+  if (_secManageOpen && !e.target.closest('.sec-rail-item')) _secCerrarMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') _secCerrarMenu();
+});
+
+// Renombrar: replica el nuevo nombre en config.seccion de TODAS sus preguntas
+// (vía edit_pregunta) y renombra también la tarjeta «marca».
+function _secAbrirRenombrar(host, sec, btnItem, panel) {
+  panel.innerHTML = '';
+  const form = div('sec-rail-rename-form');
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.maxLength = 60; inp.value = sec.nombre || sec.titulo;
+  inp.setAttribute('aria-label', 'Nuevo nombre de la sección');
+  const ok = document.createElement('button');
+  ok.type = 'button'; ok.className = 'btn-propose sec-rm-ok'; ok.textContent = 'Guardar';
+  const cancel = document.createElement('button');
+  cancel.type = 'button'; cancel.className = 'btn-pc sec-rm-cancel'; cancel.textContent = 'Cancelar';
+  form.append(inp, ok, cancel);
+  panel.appendChild(form);
+  inp.focus(); inp.select();
+  cancel.addEventListener('click', e => { e.stopPropagation(); _secCerrarMenu(); });
+  const run = async () => {
+    const nuevo = inp.value.trim();
+    if (!nuevo) { inp.focus(); return; }
+    if (nuevo.toLowerCase() === String(sec.nombre || '').trim().toLowerCase() &&
+        !(sec.encabezadoIdx >= 0 && schema[sec.encabezadoIdx] &&
+          schema[sec.encabezadoIdx].label !== nuevo)) {
+      _secCerrarMenu(); return;
+    }
+    ok.disabled = true; ok.textContent = 'Guardando…';
+    await renombrarSeccion(sec.nombre || sec.titulo, nuevo);
+  };
+  ok.addEventListener('click', e => { e.stopPropagation(); run(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); run(); }
+    if (e.key === 'Escape') _secCerrarMenu();
+  });
+}
+
+// Eliminación en dos pasos con aviso claro (inline, sin window.confirm).
+function _secAbrirEliminar(host, sec, btnItem, panel) {
+  panel.innerHTML = '';
+  const nPreg = sec.items.filter(it => !(it.q.config && it.q.config.esEncabezado)).length;
+  const box = div('sec-rail-del-confirm');
+  box.innerHTML =
+    `<div class="sec-rail-del-txt">¿Eliminar la <b>sección «${esc(sec.titulo)}»</b>? ` +
+    (nPreg
+      ? `Sus <b>${nPreg}</b> pregunta${nPreg === 1 ? '' : 's'} NO se borran: pasarán a ` +
+        `«Sin sección» (solo desaparece la agrupación y su marca del raíl).`
+      : 'Solo se eliminará su marca del raíl (la sección está vacía).') +
+    ` Se aplica para todo el grupo.</div>` +
+    '<div class="sec-rail-del-actions">' +
+      '<button type="button" class="btn-pc sec-rd-cancel">Cancelar</button>' +
+      '<button type="button" class="btn-pc btn-pc-contra sec-rd-ok">Sí, eliminar sección</button>' +
+    '</div>';
+  panel.appendChild(box);
+  box.querySelector('.sec-rd-cancel').addEventListener('click', e => {
+    e.stopPropagation(); _secCerrarMenu();
+  });
+  box.querySelector('.sec-rd-ok').addEventListener('click', async e => {
+    e.stopPropagation();
+    const okBtn = box.querySelector('.sec-rd-ok');
+    okBtn.disabled = true; okBtn.textContent = 'Eliminando…';
+    await eliminarSeccion(sec.nombre || sec.titulo);
+  });
+}
+
+// Repite el slug de crearSeccion para que las marcas generadas coincidan.
+function _secHeaderId(nombre) {
+  return 'seccion_' + String(nombre).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '').slice(0, 40);
+}
+
+// ¿Es esta pregunta la «marca» (encabezado) de la sección `nombre`?
+function _esMarcaDeSeccion(q, nombre) {
+  if (!q || !q.config || !q.config.esEncabezado) return false;
+  const key = _secNormNombre(nombre);
+  return _secNormNombre(q.config.seccion || q.label) === key || q.id.startsWith(_secHeaderId(nombre));
+}
+
+// Renombra una sección: replica el nuevo nombre en config.seccion de todas
+// sus preguntas (edit_pregunta) y actualiza también la etiqueta de la marca.
+async function renombrarSeccion(nombreViejo, nombreNuevo) {
+  if (!user) { showStatus('Inicia sesión para renombrar secciones', 'err'); return false; }
+  nombreNuevo = String(nombreNuevo || '').trim();
+  if (!nombreNuevo) return false;
+  const afectadas = schema.filter(q =>
+    q.config && !_esMarcaDeSeccion(q, nombreViejo) &&
+    _secNormNombre(q.config.seccion || '') === _secNormNombre(nombreViejo));
+  const marcas = schema.filter(q => _esMarcaDeSeccion(q, nombreViejo));
+  let ok = 0, errs = 0;
+  for (const q of afectadas.concat(marcas)) {
+    const newCfg = Object.assign({}, q.config || {}, { seccion: nombreNuevo });
+    try {
+      await apiAuth({
+        action: 'edit_pregunta',
+        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+        questionId: q.id,
+        label: q.config.esEncabezado ? nombreNuevo : q.label,
+        config: newCfg,
+      });
+      q.config = newCfg;
+      if (q.config.esEncabezado) q.label = nombreNuevo;
+      ok++;
+    } catch (e) {
+      console.warn('No se pudo renombrar la pregunta', q.id, e);
+      errs++;
+    }
+  }
+  if (!errs) {
+    showStatus(`Sección renombrada a «${nombreNuevo}» (${ok} elemento${ok === 1 ? '' : 's'} actualizado${ok === 1 ? '' : 's'}).`, 'ok', 5000);
+  } else {
+    showStatus(`Se renombró parcialmente: ${ok} bien, ${errs} con error.`, 'err', 7000);
+  }
+  lastRaw = '';
+  pollOnce();
+  _secCerrarMenu();
+  goToSectionDeNombre(nombreNuevo);
+  return !errs;
+}
+
+// Elimina una sección: borra la tarjeta «marca» (delete_pregunta) y quita
+// config.seccion a sus preguntas, que pasan a «Sin sección» (conservadas).
+async function eliminarSeccion(nombre) {
+  if (!user) { showStatus('Inicia sesión para eliminar secciones', 'err'); return false; }
+  nombre = String(nombre || '').trim();
+  if (!nombre) return false;
+  const preguntas = schema.filter(q =>
+    q.config && !_esMarcaDeSeccion(q, nombre) &&
+    _secNormNombre(q.config.seccion || '') === _secNormNombre(nombre));
+  const marcas = schema.filter(q => _esMarcaDeSeccion(q, nombre));
+  let errs = 0;
+  // 1) Las preguntas pasan a «Sin sección» ANTES de borrar la marca, para que
+  //    en ningún momento queden huérfanas de un grupo que ya no existe.
+  for (const q of preguntas) {
+    const newCfg = Object.assign({}, q.config || {});
+    delete newCfg.seccion;
+    try {
+      await apiAuth({
+        action: 'edit_pregunta',
+        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+        questionId: q.id, label: q.label, config: newCfg,
+      });
+      q.config = newCfg;
+    } catch (e) {
+      console.warn('No se pudo mover a «Sin sección» la pregunta', q.id, e);
+      errs++;
+    }
+  }
+  // 2) Borrar la/s marca/s
+  for (const m of marcas) {
+    try {
+      await apiAuth({
+        action: 'delete_pregunta',
+        eid: user.eid, nombre: user.nombre, pinHash: user.pinHash,
+        questionId: m.id,
+      });
+      schema = schema.filter(x => x.id !== m.id);
+      const card = cardFor(m.id);
+      if (card) card.remove();
+    } catch (e) {
+      console.warn('No se pudo borrar la marca de sección', m.id, e);
+      errs++;
+    }
+  }
+  _secCerrarMenu();
+  if (!errs) {
+    showStatus(`Sección «${nombre}» eliminada. ${preguntas.length} pregunta${preguntas.length === 1 ? '' : 's'} pasaron a «Sin sección».`,
+               'ok', 7000);
+  } else {
+    showStatus(`La sección se eliminó parcialmente (${errs} operación(es) con error). Revisa el raíl.`, 'err', 8000);
+  }
+  lastRaw = '';
+  pollOnce();
+  refreshSecciones();
+  return !errs;
+}
+
+// Abre #add-q-form (tarjeta «Ampliar el cuestionario») con la sección ya
+// seleccionada en el desplegable. Llamado desde el menú 🗂 y la lista de gestión.
+function abrirAddPreguntaEnSeccion(nombre) {
+  const f = $('add-q-form'), t = $('btn-toggle-add-q');
+  if (t && !f.classList.contains('open')) t.click();  // rebind de secciones/condición
+  const sel = $('add-q-seccion');
+  if (sel) {
+    const key = _secNormNombre(nombre);
+    const op = key ? [...sel.options].find(o => _secNormNombre(o.value) === key) : null;
+    sel.value = op ? op.value : '';
+    if (typeof syncAddQSeccionField === 'function') syncAddQSeccionField();
+  }
+  if (f) f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const lbl = $('add-q-label');
+  if (lbl) setTimeout(() => lbl.focus(), 250);
 }
 
 // Botón «+ Nueva sección» del pie del raíl: pide un nombre de forma inline
