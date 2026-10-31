@@ -33,16 +33,12 @@
         <input type="text" id="login-nombre" placeholder="Como quieres aparecer en el grupo" autocomplete="name" maxlength="40">
       </div>
       <div class="login-field">
-        <label for="login-pin">Contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(4-8 dí­gitos o letras, solo tú lo sabes)</span></label>
-        <input type="password" id="login-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="current-password">
-      </div>
-      <div class="login-field">
         <label for="login-eid">ID de encuesta <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(minúsculas y guiones)</span></label>
         <input type="text" id="login-eid" placeholder="p.ej. pirineos-2026" autocomplete="off" maxlength="40">
       </div>
       <label class="login-remember" style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;font-size:0.85rem;color:var(--muted);cursor:pointer">
         <input type="checkbox" id="login-recordar" checked style="width:auto;margin:0">
-        Recordar sesión en este dispositivo (12 h)
+        Recordar sesión en este dispositivo
       </label>
 
       <!-- Campos extra solo al crear nuevo viaje -->
@@ -132,10 +128,6 @@
         <div class="login-field">
           <label for="acc-nombre">Tu nombre</label>
           <input type="text" id="acc-nombre" maxlength="40" autocomplete="name">
-        </div>
-        <div class="login-field">
-          <label for="acc-pin">Nueva contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(opcional - deja vací­o para no cambiarla)</span></label>
-          <input type="password" id="acc-pin" placeholder="••••" maxlength="8" inputmode="text" autocomplete="new-password">
         </div>
         <div class="login-field">
           <label for="acc-partida">¿Desde dónde sales el dí­a del viaje? <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(dirección, ciudad o «lat,lng» - se usa en el mapa para calcular distancias)</span></label>
