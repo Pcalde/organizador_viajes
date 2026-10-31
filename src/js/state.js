@@ -1,12 +1,5 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
-// `user.pinHash` vive SOLO en memoria (nunca en localStorage): si el hash
-// circulara por disco, cualquiera con acceso al navegador podría reenviarlo
-// y autenticarse sin conocer el PIN (el hash funciona como contraseña).
-// NOTA: se usa `var` a propósito. Cada archivo .js es un <script> clásico
-// independiente; con `const/let` estas variables quedarían en el "script
-// scope" de ESTE archivo y serían invisibles para los demás (ReferenceError).
-// Con `var` se cuelgan en window y son compartidas por toda la app.
-var user            = null;  // { nombre, eid, pinHash? }
+var user            = null;  // { nombre, eid, pinHash } (pinHash = NO_PIN, ignorado por el servidor)
 var encuestaTitulo  = 'Cuestionario de viaje';
 var schema          = [];
 var proscontras     = [];
@@ -17,10 +10,30 @@ var debate          = [];
 var serverHasV2     = true;  // Detecta si _snapshot devuelve el campo `respuestas`
 var activeMode      = 'survey';
 var draftDirty      = false;
+// Asistente del cuestionario (wizard.js): una pregunta por tarjeta + navegación
+var surveyWizardMode = false; // se inicializa desde localStorage al arrancar
+var wizIndex         = 0;     // sección activa mientras se responde
 var weightByProb    = true;
 var lastRaw         = '';
 var saveTimer       = null;
 var statusTimer     = null;
+
+// ── MUTACIONES vs POLLING ───────────────────────────────────────────────────
+// Mientras hay una mutación en curso (crear/borrar/reordenar), el polling no
+// aplica datos del servidor: así no pisa el cambio optimista ni lo hace
+// "desaparecer". mutSeq descarta respuestas de sondeos iniciados antes.
+var mutating = 0;
+var mutSeq   = 0;
+async function mutate(fn) {
+  mutating++;
+  try { return await fn(); }
+  finally {
+    mutating--;
+    mutSeq++;
+    lastRaw = '';
+    if (!mutating && typeof pollOnce === 'function') pollOnce();
+  }
+}
 
 // ── UTILIDADES ──────────────────────────────────────────────────────────────
 var $ = id => document.getElementById(id);
@@ -104,19 +117,15 @@ function _extractRaw(ansObj, q) {
     case 'casas':            return ansObj.casas ?? null;
     case 'precio':           return ansObj.precioMaxPP ?? null;
     case 'transporte':       return ansObj.transporte ?? null;
-    case 'disponibilidad': {
+    case 'disponibilidad':
       if (!ansObj.disponibilidad && !ansObj.rangosFechas && !ansObj.diasMax) return null;
-      const disp = ansObj.disponibilidad || {};
       return {
-        ...disp,
-        diasMax: disp.diasMax ?? ansObj.diasMax ?? 5,
-        soloFinde: !!disp.soloFinde,
-        soloEntreSemana: !!disp.soloEntreSemana,
-        meDaIgual: !!disp.meDaIgual,
-        preferirPuente: !!disp.preferirPuente,
-        rangos: disp.rangos || ansObj.rangosFechas || [],
+        diasMax: ansObj.diasMax ?? 5,
+        soloFinde: !!(ansObj.disponibilidad && ansObj.disponibilidad.soloFinde),
+        meDaIgual: !!(ansObj.disponibilidad && ansObj.disponibilidad.meDaIgual),
+        preferirPuente: !!(ansObj.disponibilidad && ansObj.disponibilidad.preferirPuente),
+        rangos: ansObj.rangosFechas || [],
       };
-    }
     default:
       return (ansObj.extras && q.id in ansObj.extras) ? ansObj.extras[q.id] : null;
   }
@@ -124,10 +133,4 @@ function _extractRaw(ansObj, q) {
 function extractAnswer(ansObj, q) {
   const v = _extractRaw(ansObj, q);
   return q.tipo === 'voto-ponderado' ? normPond(v) : v;
-}
-var mutating = 0;
-async function mutate(fn) {
-  mutating++;
-  try { return await fn(); }
-  finally { mutating--; lastRaw = ''; pollOnce(); }
 }
