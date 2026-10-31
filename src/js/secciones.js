@@ -367,6 +367,18 @@ function secHeaderPara(nombre) {
     _secNormNombre(q.config.seccion || q.label) === key) || null;
 }
 
+// Índice de la primera pregunta visible de una sección (acepta objeto o nombre).
+// Envuelve _secPrimeraVisible para uso desde forms.js (lista de gestión 🗂).
+function secPrimeraVisibleDe(secOrNombre, answers) {
+  const st = answers || readState().answers;
+  let sec = secOrNombre;
+  if (typeof sec === 'string') {
+    const key = _secNormNombre(sec);
+    sec = seccionesDelEsquema().find(s => _secNormNombre(s.nombre) === key);
+  }
+  return sec ? _secPrimeraVisible(sec, st) : -1;
+}
+
 // Inserta `card` en el contenedor justo después de la tarjeta de `beforeQ`
 // (o al principio si no hay referencia). Mantiene DOM y esquema alineados:
 // polling/syncSchemaToDOM solo añaden/quitan tarjetas, nunca las reubican,
