@@ -66,7 +66,14 @@ function _tripAlias(eid) {
 async function crearPerfilLocal(nombre, password) {
   const salt = randomHex(16);
   const derived = await _deriveKeyB64(password, salt);
-  const p = { nombre, salt, derived, viajes: {} };
+  // Viajes preexistentes en el almacén v3 (sesión legacy guardada): se
+  // adoptan al perfil nuevo para no perder accesos al fijar la contraseña.
+  const viajes = {};
+  try {
+    const s = getSavedSessionRaw();
+    if (s && s.eid) viajes[s.eid] = { alias: '', ts: Date.now() };
+  } catch (e) {}
+  const p = { nombre, salt, derived, viajes };
   _saveProfileStore(p);
   _perfil.activo = true; _perfil.nombre = nombre; _perfil.clave = derived;
 }
@@ -152,6 +159,29 @@ function _extraerEid(txt) {
   return normEid(txt);
 }
 
+// Abre #login-screen en modo «Entrar» con el eid (y el nombre del perfil)
+// pre-rellenados. Se usa cuando la entrada silenciosa desde «Mis viajes»
+// falla porque el PIN cambió o la credencial caducó.
+function abrirLoginParaViaje(eid, alias) {
+  hideTripsScreen();
+  $('survey-screen').style.display = 'none';
+  const scr = $('login-screen');
+  if (!scr) return;
+  scr.style.display = 'flex';
+  if (typeof setLoginMode === 'function') setLoginMode(false);
+  const t = $('login-eid');
+  if (t) t.value = eid;
+  const n = $('login-nombre');
+  if (n && !n.value) n.value = _perfil.nombre || '';
+  const errEl = $('login-error');
+  if (errEl) {
+    errEl.textContent = `Vuelve a introducir el PIN de «${alias || eid}» para actualizar el acceso guardado.`;
+    errEl.style.display = 'block';
+  }
+  const p = $('login-pin');
+  if (p) setTimeout(() => p.focus(), 60);
+}
+
 function renderTripsList() {
   const host = $('trips-list');
   if (!host) return;
@@ -184,6 +214,9 @@ function renderTripsList() {
         return;
       }
       try {
+        // Entrada silenciosa: el pinHash del monedero cifra una sesión v3 con
+        // un secreto nuevo en memoria (mismo mecanismo que el login normal).
+        setSessionSecret(randomHex(32));
         const datos = await api({ action: 'all', eid, nombre: _perfil.nombre, pinHash });
         user = { nombre: _perfil.nombre, pinHash, eid };
         await beginSession(_perfil.nombre, eid, pinHash, { persist: true });
@@ -192,15 +225,42 @@ function renderTripsList() {
         hideTripsScreen();
         enterSurvey();
       } catch (e) {
+        setSessionSecret(null);
         btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar →';
         const muerto = /no existe|not found|404|registrado/i.test(String(e.message || ''));
-        row.classList.add(muerto ? 'trips-dead' : 'trips-error-row');
-        tripsErr(muerto
-          ? `El viaje «${eid}» ya no existe en el servidor. Puedes quitarlo de la lista (🗑).`
-          : `No se pudo entrar en «${eid}»: ${e.message}`);
+        if (muerto) {
+          row.classList.add('trips-dead');
+          tripsErr(`El viaje «${eid}» ya no existe en el servidor. Puedes quitarlo de la lista (🗑).`);
+        } else {
+          // PIN cambiado u otra causa: se abre el login con el eid relleno.
+          abrirLoginParaViaje(eid, viajes[eid].alias || '');
+        }
       }
     });
     tools.appendChild(btnEntrar);
+
+    const btnCopy = document.createElement('button');
+    btnCopy.type = 'button'; btnCopy.className = 'btn-propose trips-btn-copy';
+    btnCopy.title = 'Copiar enlace de invitación de «' + (viajes[eid].alias || eid) + '»';
+    btnCopy.textContent = '🔗 Copiar enlace';
+    btnCopy.addEventListener('click', async () => {
+      const url = location.origin + location.pathname + '?e=' + encodeURIComponent(eid);
+      let ok = false;
+      try { await navigator.clipboard.writeText(url); ok = true; }
+      catch (e) {
+        // Fallback para navegadores sin API de portapapeles (o sin HTTPS).
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          ok = document.execCommand('copy');
+          ta.remove();
+        } catch (e2) { ok = false; }
+      }
+      btnCopy.textContent = ok ? '✓ ¡Copiado!' : '⚠ ' + url;
+      setTimeout(() => { btnCopy.textContent = '🔗 Copiar enlace'; }, 2500);
+    });
+    tools.appendChild(btnCopy);
 
     const btnDel = document.createElement('button');
     btnDel.type = 'button'; btnDel.className = 'sec-rail-tool sec-rail-delete';
@@ -226,11 +286,28 @@ function renderTripsList() {
 function showTripsScreen() {
   const scr = $('trips-screen');
   if (!scr) return;
-  $('login-screen').style.display  = 'none';
-  $('survey-screen').style.display = 'none';
+  const ls = $('login-screen'), ss = $('survey-screen');
+  if (ls) ls.style.display = 'none';
+  if (ss) ss.style.display = 'none';
+  stopPolling();
+  clearTimeout(saveTimer);
   scr.style.display = 'flex';
   const n = $('trips-nombre');
   if (n) n.textContent = _perfil.nombre || '—';
+  // Si el perfil está bloqueado (sin clave en memoria), mostrar la tarjeta de
+  // contraseña y ocultar la lista hasta desbloquear.
+  const chk = $('trips-check-card'), main = $('trips-main-card');
+  if (_perfil.clave) {
+    if (chk) chk.style.display = 'none';
+    if (main) main.style.display = '';
+  } else {
+    if (chk) chk.style.display = '';
+    if (main) main.style.display = 'none';
+    const cn = $('trips-check-nombre');
+    if (cn) cn.textContent = _perfil.nombre ? '· ' + _perfil.nombre : '';
+    const pass = $('trips-pass');
+    if (pass) setTimeout(() => pass.focus(), 60);
+  }
   renderTripsList();
   tripsErr('');
 }
@@ -242,8 +319,9 @@ function hideTripsScreen() {
 function salirDelPerfil() {
   stopPolling();
   clearTimeout(saveTimer);
-  clearSession();
-  try { localStorage.removeItem(LS_USER); } catch (e) {}
+  clearSession();                                   // revoca la sesión v3
+  setSessionSecret(null);
+  try { localStorage.removeItem(LS_USER); } catch (e) {}  // clave legada v2
   Object.keys(viajesGuardados()).forEach(eid => {
     try { localStorage.removeItem(LS_DRAFT(eid)); } catch (e) {}
   });
@@ -255,22 +333,49 @@ function salirDelPerfil() {
   resetAusencias();
   const qc = $('questions-container'); if (qc) qc.innerHTML = '';
   const ac = $('ausencias-card'); if (ac) ac.style.display = 'none';
-  $('survey-screen').style.display = 'none';
-  $('trips-screen').style.display  = 'none';
-  $('login-screen').style.display  = 'flex';
+  const sv = $('survey-screen'); if (sv) sv.style.display = 'none';
+  const tr = $('trips-screen');  if (tr) tr.style.display = 'none';
+  const lg = $('login-screen');  if (lg) lg.style.display = 'flex';
   const btn = $('btn-login');
   if (btn) { btn.textContent = 'Entrar →'; btn.disabled = false; }
 }
 
-// Enlazado una vez (desde main.js en DOMContentLoaded).
+// «Logout suave» (botón ⌂): cierra la encuesta pero CONSERVA el perfil local.
+function volverATrips() {
+  stopPolling();
+  clearTimeout(saveTimer);
+  clearSession();                                   // revoca la sesión v3
+  setSessionSecret(null);
+  user = null;
+  schema = []; proscontras = []; respondentes = []; ausencias = []; lastRaw = '';
+  resetAusencias();
+  const qc = $('questions-container'); if (qc) qc.innerHTML = '';
+  const ac = $('ausencias-card'); if (ac) ac.style.display = 'none';
+  showTripsScreen();
+}
+
+// ¿Existe perfil local en disco (aunque esté bloqueado)? — para el arranque.
+function hayPerfilLocal() { return !!_loadProfileStore(); }
+
+// Carga los datos NO sensibles del perfil (nombre y lista de viajes) sin
+// descifrar nada: sirve para pintar «Mis viajes» con la tarjeta de bloqueo.
 function initPerfil() {
+  const p = _loadProfileStore();
+  if (p) { _perfil.activo = true; _perfil.nombre = p.nombre; _perfil.clave = null; }
+
   const btnCreate = $('btn-trips-create');
   if (btnCreate) btnCreate.addEventListener('click', () => {
     hideTripsScreen();
-    $('login-screen').style.display = 'flex';
+    const ls = $('login-screen');
+    if (ls) ls.style.display = 'flex';
+    // El acceso directo del login es solo «Entrar»: la creación de viaje se
+    // hace desde «Mis viajes» (main.js → setLoginMode). Aun así, si alguien
+    // llega al login por otro camino, el plegable «+ Crear» sigue disponible.
     if (typeof setLoginMode === 'function') setLoginMode(true);
     const inp = $('login-nombre');
     if (inp && !inp.value) inp.value = _perfil.nombre || '';
+    const np = $('login-perfil-pass-nueva');
+    if (np) setTimeout(() => np.focus(), 60);
   });
 
   const btnUnir = $('btn-trips-unir');
@@ -279,12 +384,16 @@ function initPerfil() {
     const eid = _extraerEid(inpEid && inpEid.value);
     if (!eid) { tripsErr('Introduce un código o enlace de invitación válido.'); return; }
     hideTripsScreen();
-    $('login-screen').style.display = 'flex';
+    const ls = $('login-screen');
+    if (ls) ls.style.display = 'flex';
+    // «Unirme» es siempre modo Entrar (con el eid normalizado ya relleno).
     if (typeof setLoginMode === 'function') setLoginMode(false);
     const t = $('login-eid');
     if (t) t.value = eid;
     const n = $('login-nombre');
     if (n && !n.value) n.value = _perfil.nombre || '';
+    const pw = $('login-perfil-pass');
+    if (pw && _perfil.clave) pw.value = '';   // sin restos de la contraseña local
     const p = $('login-pin');
     if (p) setTimeout(() => p.focus(), 50);
   };
@@ -301,10 +410,9 @@ function initPerfil() {
   const doUnlock = async () => {
     const ok = await unlockPerfil(pass ? pass.value : '');
     if (!ok) { tripsErr('Contraseña incorrecta.'); if (pass) pass.select(); return; }
-    if (chk) chk.style.display = 'none';
     if (pass) pass.value = '';
     tripsErr('');
-    renderTripsList();
+    showTripsScreen();      // oculta la tarjeta de bloqueo y pinta la lista
   };
   if (acc)  acc.addEventListener('click', doUnlock);
   if (pass) pass.addEventListener('keydown', e => { if (e.key === 'Enter') doUnlock(); });
