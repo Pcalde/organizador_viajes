@@ -14,12 +14,51 @@
 </head>
 <body>
 
-<!-- ═══════════════════════════ LOGIN / CREACIí“N ═════════════════════════ -->
+<!-- ═══════════════════════ MENÚ INTERMEDIO: MIS VIAJES ══════════════════
+     Perfil local (nombre + contraseña) con lista de viajes guardada en
+     localStorage. Desde aquí se entra a un viaje, se crea otro o se
+     accede con un enlace de invitación / código copiado. -->
+<div id="trips-screen" style="display:none">
+  <div class="login-wrap trips-wrap">
+    <header>
+      <h1>Cuestionador</h1>
+      <p style="margin-top:12px;color:var(--muted);font-size:0.95rem">Mis viajes</p>
+    </header>
+    <div class="card">
+      <div class="trips-profile-row">
+        <span class="trips-avatar" id="trips-avatar" aria-hidden="true">🙂</span>
+        <div class="trips-profile-txt">
+          <strong id="trips-nombre">—</strong>
+          <button type="button" class="btn-link-like" id="btn-trips-logout">Cambiar de perfil / salir</button>
+        </div>
+      </div>
+
+      <div class="trips-section-label">Tus viajes</div>
+      <div id="trips-list" class="trips-list"></div>
+
+      <div class="trips-actions">
+        <button type="button" class="btn-generate" id="btn-trips-create">+ Crear viaje nuevo →</button>
+      </div>
+
+      <details class="trips-join-box">
+        <summary>Unirme con un enlace de invitación o código</summary>
+        <div class="trips-join-fields">
+          <input type="text" id="trips-eid-input" placeholder="código o enlace (p. ej. pirineos-2026 o https://…/?e=pirineos-2026)" autocomplete="off">
+          <button type="button" class="btn-propose" id="btn-trips-unir">Unirme →</button>
+        </div>
+      </details>
+
+      <div class="login-error" id="trips-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ LOGIN / CREACIÓN ═════════════════════════ -->
 <div id="login-screen">
   <div class="login-wrap">
     <header>
       <h1>Cuestionador</h1>
-      <p style="margin-top:12px;color:var(--muted);font-size:0.95rem">íšnete a la encuesta de tu grupo o crea un nuevo viaje</p>
+      <p style="margin-top:12px;color:var(--muted);font-size:0.95rem" id="login-subtitle">Únete a la encuesta de tu grupo o crea un nuevo viaje</p>
     </header>
     <div class="card">
       <!-- Conmutador Entrar vs Crear -->
@@ -33,8 +72,12 @@
         <input type="text" id="login-nombre" placeholder="Como quieres aparecer en el grupo" autocomplete="name" maxlength="40">
       </div>
       <div class="login-field">
-        <label for="login-eid">ID de encuesta <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(minúsculas y guiones)</span></label>
-        <input type="text" id="login-eid" placeholder="p.ej. pirineos-2026" autocomplete="off" maxlength="40">
+        <label for="login-pin">Contraseña <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(mínimo 4 caracteres; se recuerda cifrada en este dispositivo)</span></label>
+        <input type="password" id="login-pin" placeholder="••••" maxlength="64" inputmode="text" autocomplete="current-password">
+      </div>
+      <div class="login-field">
+        <label for="login-eid">ID / código de invitación <span style="color:var(--muted);font-size:0.78rem;font-weight:400">(pega aquí el enlace o el código)</span></label>
+        <input type="text" id="login-eid" placeholder="p.ej. pirineos-2026 o https://…/?e=pirineos-2026" autocomplete="off" maxlength="300">
       </div>
       <label class="login-remember" style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;font-size:0.85rem;color:var(--muted);cursor:pointer">
         <input type="checkbox" id="login-recordar" checked style="width:auto;margin:0">
@@ -73,6 +116,7 @@
       <span id="utag-nombre">-</span>
       <span class="eid" id="utag-eid"></span>
       <span class="poll-dot" id="poll-dot" title="Sincronización activa"></span>
+      <button class="btn-logout" id="btn-back-trips" title="Volver a Mis viajes">⌂</button>
       <button class="btn-logout" id="btn-logout" title="Cerrar sesión">✕</button>
     </div>
   </header>
@@ -149,7 +193,7 @@
   <!-- -- VISTA 1: ENCUESTA INDIVIDUAL (por secciones, secciones.js) ------ -->
   <div class="form-wrap" id="view-survey">
 
-    <!-- RAíL DE SECCIONES: siempre visible a la izquierda (chips horizontales
+    <!-- RAíL DE SECCIONES: siempre visible a la izquierda (chips horizontales
          en pantallas estrechas). Lo rellena renderRail() en secciones.js. -->
     <nav id="sec-rail" class="sec-rail" aria-label="Secciones del cuestionario"></nav>
 
@@ -228,6 +272,49 @@
         </div>
       </div>
 
+      <!-- PROPONER NUEVA SECCIÓN: crea la sección con su marca en el raíl y,
+           opcionalmente, una primera pregunta dentro de ella. -->
+      <div class="card" id="add-section-card">
+        <div class="card-title"><span class="num">▤</span> Secciones del cuestionario</div>
+        <p class="participants-note" style="margin-bottom:12px">Agrupa las preguntas por secciones. Puedes renombrar o eliminar cualquier sección desde el lápiz 🗂 de su ficha en el raíl; las preguntas que contenida pasan a «Sin sección».</p>
+        <button class="add-opt-trigger" id="btn-toggle-add-sec" type="button">+ Crear una nueva sección</button>
+        <div class="add-q-form" id="add-sec-form">
+          <div class="add-q-field">
+            <label>Nombre de la sección</label>
+            <input type="text" id="add-sec-nombre" maxlength="60" placeholder="p.ej. Transporte">
+          </div>
+          <details class="add-sec-firstq">
+            <summary>Primera pregunta (opcional)</summary>
+            <div class="add-q-field" style="margin-top:8px">
+              <label>Tipo de pregunta</label>
+              <select id="add-sec-q-tipo">
+                <option value="checkbox">Selección múltiple (Checkbox)</option>
+                <option value="radio">Selección única (Radio)</option>
+                <option value="voto-ponderado">Votación con puntos (-1, +1, +3)</option>
+                <option value="slider">Rango numérico (Slider)</option>
+                <option value="textarea">Texto libre</option>
+              </select>
+            </div>
+            <div class="add-q-field">
+              <label>Texto de la pregunta</label>
+              <input type="text" id="add-sec-q-label" placeholder="p.ej. ¿Qué medio de transporte prefieres?">
+            </div>
+            <div class="add-q-field" id="add-sec-q-opts-wrap">
+              <label>Opciones iniciales</label>
+              <div class="add-q-opts-container" id="add-sec-q-opts-container">
+                <div class="add-q-opt-row">
+                  <input type="text" placeholder="Opción 1">
+                  <button class="btn-remove" type="button">✕</button>
+                </div>
+              </div>
+              <button class="btn-add-q-opt" type="button" id="btn-add-sec-q-opt">+ Opción</button>
+            </div>
+          </details>
+          <button class="btn-propose" type="button" id="btn-submit-new-sec">Crear sección →</button>
+        </div>
+        <div class="sec-manage-list" id="sec-manage-list"></div>
+      </div>
+
       <!-- AUSENCIAS -->
       <div class="card survey-intro-card" id="ausencias-card" style="display:none">
         <div class="card-title"><span class="num"><i class="fa-solid fa-chart-line"></i></span> Probabilidades de asistencia</div>
@@ -304,8 +391,8 @@
 <script src="src/js/forms.js?v=4"></script>
 <script src="src/js/answers.js?v=2"></script>
 <script src="src/js/reformulario.js?v=2"></script>
-<!-- Cuestionario por secciones (raí­l, barra inferior, condiciones «mostrarSi»):
-     módulo con funciones EXPLíCITAS llamado desde main.js y enterSurvey().
+<!-- Cuestionario por secciones (raíl, barra inferior, condiciones «mostrarSi»):
+     módulo con funciones EXPLÍCITAS llamado desde main.js y enterSurvey().
      Sin monkeypatching; sustituye al antiguo wizard.js. -->
 <script src="src/js/secciones.js?v=14"></script>
 <script src="src/js/mapa.js"></script>
