@@ -1,7 +1,6 @@
 // ── POLLING ─────────────────────────────────────────────────────────────────
-// setTimeout encadenado, pausa con la pestaña oculta, backoff ante errores y
-// no repinta si la respuesta no cambió. No actúa mientras hay una mutación en
-// curso (ver mutate() en state.js) ni aplica respuestas de sondeos anteriores.
+// setTimeout encadenado (no solapa peticiones si el servidor tarda), pausa con la pestaña
+// oculta, backoff ante errores y no repinta si la respuesta no cambió.
 
 let pollTimer  = null;
 let pollActive = false;
@@ -34,17 +33,23 @@ function schedulePoll(ms) {
 
 async function pollOnce() {
   if (!pollActive || !user || polling) return;
-  if (mutating) { schedulePoll(1000); return; }   // reintenta cuando termine la mutación
   if (document.hidden) return;
 
+  // ¿Otra pestaña de este navegador cerró la sesión? → volver al login.
+  if (consumeRevokedElsewhere()) {
+    stopPolling();
+    try { localStorage.removeItem(LS_SESSION); } catch (e) {}   // ya revocada: no re-anunciar
+    sessionSecretB64 = null;
+    forcedLogout('Tu sesión se cerró desde otra pestaña de este navegador.');
+    return;
+  }
+
   polling = true;
-  const seq = mutSeq;
   const dot = $('poll-dot');
   if (dot) dot.classList.add('syncing');
   try {
     const data = await apiAuth({ action: 'all', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash });
     if (!pollActive || !user) return;
-    if (mutating || seq !== mutSeq) return;       // respuesta obsoleta: se descarta
     pollFails = 0;
     const raw = JSON.stringify(data);
     if (raw !== lastRaw) {

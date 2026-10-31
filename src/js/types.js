@@ -573,29 +573,6 @@ function addDateRange(card, desde = null, hasta = null) {
   list.appendChild(row);
 }
 
-function isoDateLocal(date) {
-  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-}
-
-function addGeneratedDateRanges(card) {
-  const from = card.querySelector('.range-gen-from')?.value;
-  const to = card.querySelector('.range-gen-to')?.value;
-  const pattern = card.querySelector('.range-gen-pattern')?.value;
-  if (!from || !to || from > to) { showStatus('Elige un intervalo de fechas válido.', 'err', 3500); return; }
-  const start = new Date(from + 'T12:00:00'), end = new Date(to + 'T12:00:00'), ranges = [];
-  if (pattern === 'all') ranges.push([from, to]);
-  else for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay(), matches = pattern === 'weekend' ? (dow === 6 || dow === 0) : (dow >= 1 && dow <= 5);
-    if (!matches) continue;
-    const key = isoDateLocal(d), last = ranges[ranges.length - 1];
-    if (last && new Date(last[1] + 'T12:00:00').getTime() + 86400000 === new Date(key + 'T12:00:00').getTime()) last[1] = key;
-    else ranges.push([key, key]);
-  }
-  if (!ranges.length) { showStatus('No hay fechas de ese tipo dentro del intervalo.', 'err', 3500); return; }
-  ranges.forEach(r => addDateRange(card, r[0], r[1])); triggerSave();
-  showStatus(ranges.length + ' intervalo' + (ranges.length === 1 ? '' : 's') + ' añadido' + (ranges.length === 1 ? '' : 's') + '.', 'ok', 2500);
-}
-
 // ── PUNTO DE PARTIDA COMÚN Y DISTANCIAS ─────────────────────────────────────
 // El grupo comparte un único punto de partida (editable, se recuerda en el
 // navegador). A partir de las coordenadas de cada opción se calcula la
@@ -662,24 +639,12 @@ function optKmFromSchema(op) {
   return haversineKm(origin, dest);
 }
 
-var DISP_PREFERENCIAS = [
-  { key: 'plan', title: 'Tipo de viaje', choices: [
-    { value: 'plan:dia', label: 'Ir y volver en el día' },
-    { value: 'plan:noche', label: 'Una noche o más' },
-    { value: 'plan:indiferente', label: 'Me da igual' },
-  ] },
-  { key: 'dias', title: 'Días de la semana', choices: [
-    { value: 'dias:solo_finde', label: 'Solo fines de semana' },
-    { value: 'dias:solo_semana', label: 'Solo entre semana' },
-    { value: 'dias:indiferente', label: 'Me da igual' },
-  ] },
-  { key: 'festivos', title: 'Festivos y puentes', choices: [
-    { value: 'festivos:puente', label: 'Mejor festivo o puente' },
-    { value: 'festivos:indiferente', label: 'Me es igual' },
-  ] },
+const TOGGLES_DISP = [
+  ['irYVenir',       'Plan de ir y venir en el día (sin dormir fuera)'],
+  ['soloFinde',      'Solo puedo fines de semana'],
+  ['meDaIgual',      'Me da igual entre semana o fin de semana'],
+  ['preferirPuente', 'Mejor si hay puente / festivo'],
 ];
-var DISP_PREFERENCIAS_OPCIONES = DISP_PREFERENCIAS.flatMap(g =>
-  g.choices.map(c => ({ ...c, label: `${g.title}: ${c.label}` })));
 
 // NOTA: `var` es intencional. Los <script> clásicos comparten el scope global,
 // pero las declaraciones `const/let` viven en un "script scope" separado y NO
@@ -954,27 +919,18 @@ var TIPOS = {
 },
 
   disponibilidad: {
-    build(card, q) {
+    build(card) {
       card.state.dias = createStepper(1, 30, 5, triggerSave);
 
       const sec = div();
       const lab = div();
       lab.style.cssText = 'font-size:0.85rem;color:var(--muted);margin-bottom:10px';
       lab.textContent = 'Ventanas de disponibilidad';
-      const gen = div('range-generator');
-      gen.innerHTML = '<div class="range-generator-title">Rellenar varias fechas de una vez</div>' +
-        '<div class="range-generator-fields"><label>Desde<input type="date" class="range-gen-from" min="' + hoyLocal() + '"></label>' +
-        '<label>Hasta<input type="date" class="range-gen-to" min="' + hoyLocal() + '"></label>' +
-        '<label>Repetir<select class="range-gen-pattern"><option value="weekend">Cada fin de semana</option>' +
-        '<option value="weekdays">Entre semana</option><option value="all">Cualquier fecha del período</option></select></label>' +
-        '<button type="button" class="btn-add range-gen-submit">Generar intervalos</button></div>' +
-        '<div class="range-generator-note">Los puentes cambian según el calendario local; añade sus fechas concretas con «Añadir rango».</div>';
-      gen.querySelector('.range-gen-submit').addEventListener('click', () => addGeneratedDateRanges(card));
       const rl  = div('ranges-list');
       const add = document.createElement('button');
       add.type = 'button'; add.className = 'btn-add'; add.textContent = '+ Añadir rango de fechas';
       add.addEventListener('click', () => { addDateRange(card); triggerSave(); });
-      sec.append(lab, gen, rl, add);
+      sec.append(lab, rl, add);
       card.appendChild(sec);
       addDateRange(card);
 
@@ -985,55 +941,33 @@ var TIPOS = {
       diasRow.append(dl, card.state.dias.el);
       card.appendChild(diasRow);
 
-      const prefHost = div('disp-preferences');
-      DISP_PREFERENCIAS.forEach(group => {
-        const field = div('disp-preference-group');
-        const title = document.createElement('div');
-        title.className = 'disp-preference-title'; title.textContent = group.title;
-        field.appendChild(title);
-        const options = div('disp-preference-options');
-        group.choices.forEach(option => {
-          const lbl = document.createElement('label'); lbl.className = 'disp-preference-option';
-          const inp = document.createElement('input'); inp.type = 'radio';
-          inp.name = `disp-${String(q && q.id || 'question').replace(/[^a-z0-9_-]/gi, '-')}-${group.key}`;
-          inp.value = option.value; inp.dataset.pref = group.key;
-          if (option.value.endsWith(':indiferente')) inp.checked = true;
-          inp.addEventListener('change', triggerSave);
-          const text = document.createElement('span'); text.textContent = option.label;
-          lbl.append(inp, text); options.appendChild(lbl);
-        });
-        field.appendChild(options); prefHost.appendChild(field);
+      const tw = div('toggle-wrap');
+      TOGGLES_DISP.forEach(([k, text]) => {
+        const lbl  = document.createElement('label'); lbl.className = 'toggle-label';
+        const inp  = document.createElement('input'); inp.type = 'checkbox'; inp.dataset.k = k;
+        const pill = document.createElement('span');  pill.className = 'toggle-pill';
+        lbl.append(inp, pill, document.createTextNode(' ' + text));
+        inp.addEventListener('change', triggerSave);
+        tw.appendChild(lbl);
       });
-      card.appendChild(prefHost);
+      card.appendChild(tw);
     },
     read(card) {
       const rangos = [...card.querySelectorAll('.date-range-row')].map(r => ({
         desde: r.querySelector('.range-from').value || null,
         hasta: r.querySelector('.range-to').value   || null,
       })).filter(r => r.desde || r.hasta);
-      const preferencias = [...card.querySelectorAll('input[data-pref]:checked')].map(el => el.value);
-      const plan = preferencias.find(v => v.startsWith('plan:')) || 'plan:indiferente';
-      const dias = preferencias.find(v => v.startsWith('dias:')) || 'dias:indiferente';
-      const festivos = preferencias.find(v => v.startsWith('festivos:')) || 'festivos:indiferente';
-      const out = { rangos, diasMax: card.state.dias.get(), preferencias,
-        preferenciaPlan: plan.slice(5), preferenciaDias: dias.slice(5), preferenciaFestivos: festivos.slice(9),
-        irYVenir: plan === 'plan:dia', prefiereNoche: plan === 'plan:noche',
-        soloFinde: dias === 'dias:solo_finde', soloEntreSemana: dias === 'dias:solo_semana',
-        meDaIgual: dias === 'dias:indiferente', preferirPuente: festivos === 'festivos:puente' };
+      const out = { rangos, diasMax: card.state.dias.get() };
+      TOGGLES_DISP.forEach(([k]) => { out[k] = card.querySelector(`input[data-k="${k}"]`).checked; });
       return out;
     },
     write(card, q, v) {
       if (!v) return;
       if (v.diasMax) card.state.dias.set(v.diasMax);
-      let preferencias = Array.isArray(v.preferencias) ? v.preferencias : null;
-      if (!preferencias) {
-        preferencias = [
-          v.irYVenir ? 'plan:dia' : 'plan:indiferente',
-          v.soloFinde ? 'dias:solo_finde' : v.soloEntreSemana ? 'dias:solo_semana' : 'dias:indiferente',
-          v.preferirPuente ? 'festivos:puente' : 'festivos:indiferente',
-        ];
-      }
-      card.querySelectorAll('input[data-pref]').forEach(el => { el.checked = preferencias.includes(el.value); });
+      TOGGLES_DISP.forEach(([k]) => {
+        const el = card.querySelector(`input[data-k="${k}"]`);
+        if (el) el.checked = !!v[k];
+      });
       if (v.rangos && v.rangos.length) {
         card.querySelector('.ranges-list').innerHTML = '';
         v.rangos.forEach(r => addDateRange(card, r.desde, r.hasta));

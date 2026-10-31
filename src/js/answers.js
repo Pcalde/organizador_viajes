@@ -226,8 +226,6 @@ async function enviarRespuesta(silent = false) {
 // Envolvente del botón de envío: el original no guardaba el borrador ni
 // marcaba cambios, por lo que el reformulario interactivo nunca sincronizaba.
 function patchSingleAnswer(qid, newVal) {
-  // An autosync timer can fire after the session expires or is closed elsewhere.
-  if (!user) return;
   const q = schema.find(x => x.id === qid);
   const card = cardFor(qid);
   if (!q || !card || !TIPOS[q.tipo]) return;

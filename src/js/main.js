@@ -3,6 +3,9 @@
 function switchMode(mode) {
   activeMode = mode;
 
+  // Las pestañas viven dentro del menú lateral (#side-menu). El selector
+  // antiguo #mode-tabs ya no existía, por lo que el cambio de pestaña no
+  // enlazaba con ningún botón.
   document.querySelectorAll('#side-menu .mode-tab[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
@@ -11,15 +14,24 @@ function switchMode(mode) {
   const vConsensus = $('view-consensus');
   const vDebate    = $('view-debate');
 
-  if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'flex'  : 'none';
+  // Nota: debe ser 'grid' (no 'flex'); el valor inline anterior rompía la
+  // cuadrícula de .form-wrap (raíl + columna principal) definida en styles.css.
+  if (vSurvey)    vSurvey.style.display    = mode === 'survey'    ? 'grid'  : 'none';
   if (vConsensus) vConsensus.style.display = mode === 'consensus' ? 'block' : 'none';
   if (vDebate)    vDebate.style.display    = mode === 'debate'    ? 'block' : 'none';
 
-  const fab = $('submit-fab');
-  if (fab) fab.classList.toggle('visible', mode === 'survey');
+  // Barra inferior fija: solo acompañar al usuario en la vista del cuestionario.
+  // La lógica vive en secciones.js (updateFloatingBars); el fallback cubre el
+  // caso de que el módulo no hubiera cargado aún.
+  if (typeof updateFloatingBars === 'function') {
+    updateFloatingBars();
+  } else {
+    const nav = $('sec-nav');
+    if (nav) nav.classList.toggle('visible', mode === 'survey');
+  }
 
-  if (typeof applyWizardPaging === 'function') applyWizardPaging();
-  if (typeof updateWizNav === 'function')      updateWizNav();
+  // Repintar raíl, paginación por secciones y barra tras cambiar de vista.
+  if (mode === 'survey' && typeof refreshSecciones === 'function') refreshSecciones();
 
   if (mode === 'consensus' && typeof renderReformulario === 'function') renderReformulario();
   if (mode === 'debate'    && typeof renderDebate === 'function')       renderDebate();
@@ -52,18 +64,21 @@ function toggleSideNav() {
   if (nav && nav.classList.contains('open')) closeSideNav(); else openSideNav();
 }
 
-// ── MODAL DEL MAPA ───────────────────────────────────────────────────────────
+// ── MODAL DEL MAPA (ya no es una pestaña global: se abre desde el botón 🗺️) ──
 let _mapModalBuilt = false;
 
 function closeMapModal() {
   const backdrop = $('map-modal-backdrop');
   if (backdrop) {
     backdrop.hidden = true;
+    // Garantiza que quede invisible/inerte aunque algún CSS le dé display.
     backdrop.style.setProperty('display', 'none', 'important');
   }
   document.body.classList.remove('map-modal-open');
 }
 
+// Asegura que ningún modal quede abierto de arranque (si algo rompiera JS y
+// no se ejecutara el cierre, la página quedaría tapada e inaccesible).
 function ensureModalsClosed() {
   ['map-modal-backdrop', 'account-modal-backdrop'].forEach(id => {
     const bd = $(id);
@@ -77,7 +92,7 @@ function openMapModal() {
   const body     = $('map-modal-body');
   if (!backdrop || !body) return;
   backdrop.hidden = false;
-  backdrop.style.removeProperty('display');
+  backdrop.style.removeProperty('display');   // deshace el cierre forzado
   document.body.classList.add('map-modal-open');
   if (!_mapModalBuilt && typeof buildMapView === 'function') {
     buildMapView(body);
@@ -94,6 +109,7 @@ function bindMapModal() {
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeMapModal(); });
   const btnClose = $('map-modal-close');
   if (btnClose) btnClose.addEventListener('click', closeMapModal);
+  // Botón "Ver mapa" dentro del menú lateral
   const btnMap = $('btn-map-modal');
   if (btnMap) btnMap.addEventListener('click', () => { closeSideNav(); openMapModal(); });
   document.addEventListener('keydown', e => {
@@ -129,18 +145,20 @@ function bindCreateTripUI() {
   if (btnCreate) {
     btnCreate.addEventListener('click', async () => {
       const nombre    = ($('login-nombre')?.value || '').trim();
+      const pin       = ($('login-pin')?.value || '').trim();
       const eid       = ($('login-eid')?.value || '').trim().toLowerCase();
       const titulo    = ($('login-titulo')?.value || '').trim() || 'Cuestionario de viaje';
       const plantilla = $('login-plantilla')?.value || 'vacia';
 
       if (!nombre) { showLoginErr('Introduce tu nombre.'); return; }
-      // Sin PIN, el código del viaje es el único "secreto": mejor largo y poco adivinable.
-      if (!/^[a-z0-9-]{3,60}$/.test(eid)) { showLoginErr('El código debe tener al menos 3 caracteres (solo minúsculas a-z, números y guiones).'); return; }
+      // PIN: 4–8 caracteres, dígitos o letras (la fuerza bruta se corta en el servidor).
+      if (!/^[A-Za-z0-9]{4,8}$/.test(pin)) { showLoginErr('El PIN debe tener entre 4 y 8 caracteres (dígitos o letras).'); return; }
+      if (!/^[a-z0-9-]{3,60}$/.test(eid)) { showLoginErr('El ID debe tener al menos 3 caracteres (solo minúsculas a-z, números y guiones).'); return; }
 
       btnCreate.disabled = true;
       btnCreate.textContent = 'Creando viaje…';
       try {
-        const pinHash = NO_PIN;
+        const pinHash = await sha256(pin + '|' + eid);
         const res = await api({
           action: 'crear_encuesta',
           eid, nombre, pinHash, plantilla, titulo,
@@ -149,6 +167,7 @@ function bindCreateTripUI() {
         user = { nombre: res.nombre, pinHash, eid };
         const recordar = $('login-recordar') ? $('login-recordar').checked : true;
         await beginSession(res.nombre, eid, pinHash, { persist: recordar });
+        $('login-pin').value = '';
 
         applyData(res.datos);
         $('utag-nombre').textContent = user.nombre;
@@ -156,7 +175,8 @@ function bindCreateTripUI() {
         $('login-screen').style.display  = 'none';
         $('survey-screen').style.display = 'block';
 
-        renderAllQuestions();
+        // Cuestionario por secciones: render + raíl + barra (secciones.js)
+        renderSecciones();
         if (typeof renderAusencias === 'function') renderAusencias();
         if (typeof renderReformulario === 'function') renderReformulario();
         if (typeof renderDebate === 'function') renderDebate();
@@ -172,6 +192,8 @@ function bindCreateTripUI() {
 }
 
 function bindNavigation() {
+  // Las pestañas de modo viven en el menú lateral (#side-menu), no en un
+  // contenedor #mode-tabs (selector obsoleto que dejaba la navegación muerta).
   document.querySelectorAll('#side-menu .mode-tab[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => switchMode(btn.dataset.mode));
   });
@@ -199,14 +221,15 @@ function bindNavigation() {
 
 document.addEventListener('DOMContentLoaded', () => {
   ensureModalsClosed();   // si algo falla al arrancar, la página no queda tapada
-  if (typeof wizardGetFlag === 'function') surveyWizardMode = wizardGetFlag();
   bindAuth();
   bindCreateTripUI();
   bindForms();
   bindAusencias();
   bindSubmit();
   bindNavigation();
-  if (typeof bindWizard === 'function') bindWizard();
+  // Enlazado del cuestionario por secciones (raíl, barra inferior, teclado y
+  // ajuste de la información del grupo). Sin monkeypatching: funciones explícitas.
+  if (typeof initSecciones === 'function') initSecciones();
   if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_KEY.startsWith('TU_CLAVE')) {
     showLoginErr('Falta configurar js/config.js (SUPABASE_URL y SUPABASE_KEY).');
     return;
