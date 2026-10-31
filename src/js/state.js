@@ -125,3 +125,9 @@ function extractAnswer(ansObj, q) {
   const v = _extractRaw(ansObj, q);
   return q.tipo === 'voto-ponderado' ? normPond(v) : v;
 }
+var mutating = 0;
+async function mutate(fn) {
+  mutating++;
+  try { return await fn(); }
+  finally { mutating--; lastRaw = ''; pollOnce(); }
+}
