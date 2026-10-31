@@ -5,13 +5,12 @@
 //  que alimenta el mapa (distancias a los destinos) vía setPuntoPartida().
 //  Requiere: update_profile (schema.sql), sha256 (crypto.js), session helpers.
 // ══════════════════════════════════════════════════════════════════════════
-
+const nuevoPin = ''
 function openAccountModal() {
   const backdrop = $('account-modal-backdrop');
   if (!backdrop || !user) return;
   // Prellenar con el estado actual
   $('acc-nombre').value = user.nombre || '';
-  $('acc-pin').value    = '';
   const p = puntoPartida();
   $('acc-partida').placeholder = p
     ? `Actual: ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)} (${p.texto || 'sin etiqueta'})`
@@ -56,7 +55,6 @@ async function saveAccountChanges() {
   if (!user) return;
   const btn = $('btn-account-save');
   const nuevoNombre = ($('acc-nombre')?.value || '').trim();
-  const nuevoPin    = ($('acc-pin')?.value   || '').trim();
 
   accountStatus('', 'ok');
   if (!nuevoNombre)              { accountStatus('El nombre no puede estar vacío.'); return; }
@@ -104,7 +102,6 @@ async function saveAccountChanges() {
     if (partida && partida.coords) setPuntoPartida({ lat: partida.coords.lat, lng: partida.coords.lng, texto: partida.texto });
 
     $('utag-nombre').textContent = user.nombre;
-    $('acc-pin').value = '';
     if (typeof renderParticipants === 'function') renderParticipants();
     if (typeof renderAllQuestions === 'function') renderAllQuestions();
     if (typeof restoreDraft === 'function') restoreDraft();
