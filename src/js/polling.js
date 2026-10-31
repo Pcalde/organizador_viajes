@@ -32,7 +32,7 @@ function schedulePoll(ms) {
 }
 
 async function pollOnce() {
-  if (!pollActive || !user || polling) return;
+  if (!pollActive || !user || polling || mutating) return;
   if (document.hidden) return;
 
   // ¿Otra pestaña de este navegador cerró la sesión? → volver al login.
@@ -50,6 +50,7 @@ async function pollOnce() {
   try {
     const data = await apiAuth({ action: 'all', eid: user.eid, nombre: user.nombre, pinHash: user.pinHash });
     if (!pollActive || !user) return;
+    if (mutating) return;
     pollFails = 0;
     const raw = JSON.stringify(data);
     if (raw !== lastRaw) {
